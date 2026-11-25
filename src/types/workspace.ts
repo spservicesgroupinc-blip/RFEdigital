@@ -18,6 +18,9 @@ export type ModuleId =
   | 'export'
   | 'identity';
 
+/** Studio tabs for the simplified 3-step builder flow. */
+export type BuilderStep = 1 | 2 | 3;
+
 export type TrendMarketplace =
   | 'Amazon KDP'
   | 'Etsy'

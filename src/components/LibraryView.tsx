@@ -29,7 +29,14 @@ import {
 } from '../lib/workspaceLogic';
 import { AssetPreviewImage } from './AssetPreviewImage';
 import { ConfirmDialog } from './ConfirmDialog';
-import type { BuilderStep } from './ProductBuilderView';
+import type { BuilderStep } from '../types/workspace';
+
+/** Map the legacy 4-step readiness step to the simplified 3-tab Studio step. */
+function toStudioStep(step: 1 | 2 | 3 | 4): BuilderStep {
+  if (step === 4) return 3;
+  if (step === 3) return 2;
+  return step;
+}
 
 interface LibraryViewProps {
   products: Product[];
@@ -921,7 +928,7 @@ export function LibraryView({
                     <button
                       type="button"
                       onClick={() =>
-                        onOpenBuilderForProduct(selectedProduct.id, readiness.recommendedStep)
+                        onOpenBuilderForProduct(selectedProduct.id, toStudioStep(readiness.recommendedStep))
                       }
                       className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-700 px-3 py-2.5 text-xs font-medium text-white transition-colors hover:bg-blue-800 whitespace-nowrap"
                     >
