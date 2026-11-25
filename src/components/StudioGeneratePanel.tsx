@@ -729,11 +729,49 @@ export function StudioGeneratePanel({
                         </button>
                       </div>
 
-                      {matchedStoryText && (
-                        <div className="mt-2 rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-[11px] leading-relaxed text-amber-950">
-                          <span className="font-semibold text-amber-900">Matched Story Text: </span>
-                          <span className="italic">&ldquo;{matchedStoryText}&rdquo;</span>
+                      {linkedAsset ? (
+                        <div className="mt-2">
+                          <label className="text-[11px] font-medium text-slate-500">
+                            Story Text
+                          </label>
+                          <div className="mt-1 flex items-start gap-2">
+                            <textarea
+                              rows={2}
+                              aria-label={`Interior page ${idx + 1} story text`}
+                              value={
+                                pageDrafts[linkedAsset.id]?.storyText ?? linkedAsset.storyText ?? ''
+                              }
+                              onChange={(e) =>
+                                setPageDrafts((prev) => ({
+                                  ...prev,
+                                  [linkedAsset.id]: {
+                                    storyText: e.target.value,
+                                    textPlacement: prev[linkedAsset.id]?.textPlacement ?? '',
+                                  },
+                                }))
+                              }
+                              className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-800 focus:border-blue-700 focus:outline-none"
+                            />
+                            {(pageDrafts[linkedAsset.id]?.storyText ?? linkedAsset.storyText ?? '') !==
+                              (linkedAsset.storyText ?? '') && (
+                              <button
+                                type="button"
+                                onClick={() => handleSavePageDesign(linkedAsset)}
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-800 whitespace-nowrap"
+                              >
+                                <Save className="h-3 w-3" aria-hidden="true" />
+                                Save
+                              </button>
+                            )}
+                          </div>
                         </div>
+                      ) : (
+                        matchedStoryText && (
+                          <div className="mt-2 rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-[11px] leading-relaxed text-amber-950">
+                            <span className="font-semibold text-amber-900">Matched Story Text: </span>
+                            <span className="italic">&ldquo;{matchedStoryText}&rdquo;</span>
+                          </div>
+                        )
                       )}
 
                       <div className="mt-2.5 flex flex-col gap-3 sm:flex-row">
