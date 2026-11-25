@@ -1,12 +1,17 @@
 import type {
   BatchPlan,
+  ExportArtifact,
+  GenerationRecord,
+  InteriorPromptItem,
   JobItem,
   JobStatus,
   KdpTrimSize,
   PlanTemplate,
   Product,
   ProductCategory,
+  ProductPromptPack,
   ProductStatus,
+  StorageAsset,
   TrendDeepDive,
   TrendOpportunity,
   TrendProductType,
@@ -628,6 +633,519 @@ export function normalizeKdpTrimSize(
   }
 }
 
+export const STYLE_PRESET_OPTIONS = [
+  {
+    label: '3D Animated Storybook Cartoon',
+    value:
+      '3D Animated Storybook Cartoon — expressive charming character, soft warm lighting, Pixar-inspired children’s picture book illustration',
+  },
+  {
+    label: '2D Classic Cartoon Character',
+    value:
+      '2D Classic Cartoon Character — bold clean ink outlines, vibrant playful colors, expressive storybook charm',
+  },
+  {
+    label: 'Hand-Painted Gouache Picture Book',
+    value:
+      'Hand-painted gouache picture book illustration on warm cold-press watercolor paper, editorial storybook warmth',
+  },
+  {
+    label: 'Bold & Easy Coloring Book Line Art',
+    value:
+      'Crisp black-and-white bold ink line art coloring page on pure white background, clean unshaded spaces ready for coloring',
+  },
+  {
+    label: 'Vintage Archival Portrait & Botanical Print',
+    value:
+      'Vintage archival storybook print, delicate ink linework and muted watercolor washes suitable for framed wall art',
+  },
+] as const;
+
+export function pickStylePresetForProduct(
+  category: ProductCategory,
+  hintText = ''
+): string {
+  const hint = hintText.toLowerCase();
+  if (
+    category === 'coloring-book' ||
+    hint.includes('coloring') ||
+    hint.includes('line art') ||
+    hint.includes('black ink')
+  ) {
+    return STYLE_PRESET_OPTIONS[3].value;
+  }
+  if (
+    category === 'art-print' ||
+    hint.includes('botanical') ||
+    hint.includes('wall art') ||
+    hint.includes('vintage') ||
+    hint.includes('archival')
+  ) {
+    return STYLE_PRESET_OPTIONS[4].value;
+  }
+  if (hint.includes('watercolor') || hint.includes('gouache') || hint.includes('pastel')) {
+    return STYLE_PRESET_OPTIONS[2].value;
+  }
+  if (hint.includes('2d') || hint.includes('comic') || hint.includes('flat vector')) {
+    return STYLE_PRESET_OPTIONS[1].value;
+  }
+  return STYLE_PRESET_OPTIONS[0].value;
+}
+
+export function buildPromptPackFromTrend(
+  opportunity: TrendOpportunity,
+  deepDive?: TrendDeepDive
+): ProductPromptPack {
+  const category = mapTrendProductTypeToCategory(opportunity.product_type);
+  const trimSize = normalizeKdpTrimSize(
+    opportunity.starter_blueprint.suggested_trim_size,
+    opportunity.product_type
+  );
+  const audience = opportunity.starter_blueprint.target_age_or_audience || 'General Audience';
+  const hook = opportunity.starter_blueprint.hook_concept || opportunity.title;
+  const artDirection = opportunity.starter_blueprint.art_style_direction || 'Clean editorial illustration';
+  const winningAngle = deepDive?.differentiation_angle || opportunity.winning_angle;
+  const keywords = Array.from(
+    new Set([
+      ...opportunity.starter_blueprint.seed_keywords,
+      ...(deepDive?.high_intent_keywords ?? []),
+    ])
+  ).slice(0, 10);
+  const painPoints = [
+    ...opportunity.buyer_pain_points,
+    ...(deepDive?.recurring_buyer_complaints ?? []),
+  ].slice(0, 4);
+
+  const artStylePreset = pickStylePresetForProduct(category, artDirection);
+  const now = new Date().toISOString();
+
+  let manuscriptPrompt = '';
+  let coverPrompt = '';
+  let interiorPrompts: InteriorPromptItem[] = [];
+
+  if (opportunity.product_type === 'coloring-book') {
+    manuscriptPrompt = `Write the front matter and page guide for "${opportunity.title}" targeting ${audience}. Include a warm welcome page, marker bleed-through / color-test page instructions, and a 20-scene themed page index based on this hook: ${hook}. Winning angle: ${winningAngle}.`;
+    coverPrompt = `Eye-catching full-color commercial book cover artwork for "${opportunity.title}". Show a joyful, cozy signature scene inspired by "${hook}". Art style: ${artDirection}. Leave clean open breathing room at the top third for the title typography. No garbled text.`;
+    interiorPrompts = [
+      {
+        id: 'page-1',
+        title: 'Page 1 — Signature Hero Scene',
+        prompt: `Crisp black-and-white bold ink line art coloring page for "${opportunity.title}" (${audience}). Depict the signature opening scene from "${hook}" with thick clean outlines, uncluttered shapes, and pure white background suitable for ${trimSize}" printing.`,
+      },
+      {
+        id: 'page-2',
+        title: 'Page 2 — Cozy Everyday Moment',
+        prompt: `Crisp black-and-white bold ink line art coloring page for "${opportunity.title}". Show an inviting, stress-free cozy detail scene matching "${artDirection}" with bold 3pt outlines and zero gray shading.`,
+      },
+      {
+        id: 'page-3',
+        title: 'Page 3 — Playful Spotlight Scene',
+        prompt: `Crisp black-and-white bold ink line art coloring page for "${opportunity.title}". Feature charming focal objects and characters inspired by "${winningAngle}" with generous open coloring spaces on pure white paper.`,
+      },
+      {
+        id: 'page-4',
+        title: 'Page 4 — Seasonal / Gift Bonus Page',
+        prompt: `Crisp black-and-white bold ink line art coloring page for "${opportunity.title}" celebrating its "${opportunity.seasonality}" appeal. Bold clean outlines, charming framing elements, ready for ${trimSize}" KDP printing.`,
+      },
+    ];
+  } else if (opportunity.product_type === 'wall-art') {
+    manuscriptPrompt = `Write the storefront buyer guide, printing & framing size chart (8x10, 11x14, 16x20), and collection story for "${opportunity.title}" targeting ${audience}. Hook: ${hook}. Address buyer needs: ${painPoints.join('; ') || 'crisp print resolution and cohesive gallery styling'}.`;
+    coverPrompt = `Signature hero printable wall art piece for "${opportunity.title}". Concept: ${hook}. Style: ${artDirection}. Balanced museum-grade composition, archival texture, framed-print ready on ${trimSize}" ratio, zero text or watermarks.`;
+    interiorPrompts = [
+      {
+        id: 'page-1',
+        title: 'Print 1 — Primary Focal Composition',
+        prompt: `Printable wall art piece #1 in the "${opportunity.title}" set. Central hero motif inspired by "${hook}". Style: ${artDirection}. Cohesive gallery palette, clean borders.`,
+      },
+      {
+        id: 'page-2',
+        title: 'Print 2 — Companion Study',
+        prompt: `Matching companion wall art piece #2 for "${opportunity.title}" designed to hang beside Print 1. Style: ${artDirection}. Harmonious tones and breathing room for ${trimSize}" framing.`,
+      },
+      {
+        id: 'page-3',
+        title: 'Print 3 — Atmospheric Accent Piece',
+        prompt: `Cohesive third gallery wall print for "${opportunity.title}" reinforcing "${winningAngle}". Style: ${artDirection}. Crisp archival detail, zero garbled text.`,
+      },
+      {
+        id: 'page-4',
+        title: 'Print 4 — Minimalist Collector Edition',
+        prompt: `Minimalist collector print #4 completing the "${opportunity.title}" wall art bundle for ${audience}. Style: ${artDirection}.`,
+      },
+    ];
+  } else if (opportunity.product_type === 'flashcards' || opportunity.product_type === 'ebook-planner') {
+    manuscriptPrompt = `Write the complete structured content, parent/teacher or buyer instructions, and page-by-page copy for "${opportunity.title}" targeting ${audience}. Concept: ${hook}. Differentiation: ${winningAngle}. Solve these pain points: ${painPoints.join('; ') || 'clarity and immediate practical usability'}.`;
+    coverPrompt = `Clean, modern, high-converting cover illustration for "${opportunity.title}" (${audience}). Visual concept: ${hook}. Art direction: ${artDirection}. Crisp inviting layout with open title space at the top.`;
+    interiorPrompts = [
+      {
+        id: 'page-1',
+        title: 'Page 1 — Core Theme Visual / Card Set A',
+        prompt: `Clean, calm, print-friendly illustration for "${opportunity.title}" (${audience}). Visual theme from "${hook}". Art style: ${artDirection}. Clear focal subject on clean background for ${trimSize}" printing.`,
+      },
+      {
+        id: 'page-2',
+        title: 'Page 2 — Guided Practice / Card Set B',
+        prompt: `Matching print-ready visual illustration #2 for "${opportunity.title}". Support "${winningAngle}" with approachable, clutter-free artwork in style: ${artDirection}.`,
+      },
+      {
+        id: 'page-3',
+        title: 'Page 3 — Everyday Application / Card Set C',
+        prompt: `Cohesive visual illustration #3 for "${opportunity.title}" tailored to ${audience}. Keep colors harmonious and layout readable at ${trimSize}" size.`,
+      },
+      {
+        id: 'page-4',
+        title: 'Page 4 — Milestone / Reflection Page Visual',
+        prompt: `Warm, encouraging closing illustration for "${opportunity.title}" celebrating progress and daily use. Art style: ${artDirection}.`,
+      },
+    ];
+  } else {
+    // Children's Picture Book
+    manuscriptPrompt = `Write a heartwarming, read-aloud 8-spread children's picture book manuscript for "${opportunity.title}" targeting ${audience}. Core hook: ${hook}. Differentiation angle: ${winningAngle}. Format clearly as Spread 1 through Spread 8 with rhythmic text and short visual scene notes.`;
+    coverPrompt = `Warm, irresistible children's picture book front cover illustration for "${opportunity.title}" (${audience}). Showcase the main character in the signature setting of "${hook}". Art style: ${artDirection}. Leave open sky or soft framing at the top for the book title, no garbled text.`;
+    interiorPrompts = [
+      {
+        id: 'page-1',
+        title: 'Spread 1 — Meet the Hero',
+        prompt: `Storybook interior illustration introducing the main character of "${opportunity.title}" in a cozy opening setting (${audience}). Hook: ${hook}. Art style: ${artDirection}. Consistent character design, ${trimSize}" composition.`,
+      },
+      {
+        id: 'page-2',
+        title: 'Spread 2 — The Spark of Adventure',
+        prompt: `Storybook interior illustration showing the exciting turning point in "${opportunity.title}" where the adventure begins. Art style: ${artDirection}. Expressive emotion, warm storytelling light.`,
+      },
+      {
+        id: 'page-3',
+        title: 'Spread 3 — Friendship & Discovery',
+        prompt: `Heartwarming storybook interior illustration capturing the key moment of connection and wonder in "${opportunity.title}". Highlight "${winningAngle}". Art style: ${artDirection}.`,
+      },
+      {
+        id: 'page-4',
+        title: 'Spread 4 — Cozy Happy Ending',
+        prompt: `Gentle, satisfying finale illustration for "${opportunity.title}" leaving ${audience} smiling at bedtime or storytime. Art style: ${artDirection}. Soft golden glow and cohesive series palette.`,
+      },
+    ];
+  }
+
+  const kdpMetadataPrompt = `Create a high-converting ${opportunity.marketplaces.join(' & ')} product listing for "${opportunity.title}" (${audience}, target price ${opportunity.price_range_usd}). Include: 3 strong subtitle options, a compelling scannable description that addresses these buyer pain points (${painPoints.join('; ') || 'quality and value'}), suggested categories, and 7 high-intent backend search keywords built around: ${keywords.join(', ') || opportunity.title}.`;
+
+  return {
+    sourceTrendTitle: opportunity.title,
+    targetAudience: audience,
+    conceptSummary: `${hook}${winningAngle ? ` — ${winningAngle}` : ''}`.slice(0, 600),
+    artStylePreset,
+    manuscriptPrompt,
+    kdpMetadataPrompt,
+    coverPrompt,
+    interiorPrompts,
+    updatedAt: now,
+  };
+}
+
+export function buildPromptPackFromConcept(input: {
+  title: string;
+  subtitle?: string;
+  category: ProductCategory;
+  trimSize: KdpTrimSize;
+  pageCount: number;
+  concept: string;
+  targetAudience?: string;
+  artStylePreset?: string;
+}): ProductPromptPack {
+  const title = input.title.trim() || 'Untitled Digital Product';
+  let rawConcept =
+    input.concept.trim() ||
+    input.subtitle?.trim() ||
+    `A charming, commercial-quality ${input.category.replace('-', ' ')} titled "${title}"`;
+  if (rawConcept.startsWith('[TREND RESEARCH BRIEF]')) {
+    const hookMatch = rawConcept.match(/Hook Concept:\s*\n+([^\n]+)/i);
+    const angleMatch = rawConcept.match(/Winning Differentiation Angle:\s*\n+([^\n]+)/i);
+    if (hookMatch?.[1]) {
+      rawConcept = angleMatch?.[1]
+        ? `${hookMatch[1].trim()} — ${angleMatch[1].trim()}`
+        : hookMatch[1].trim();
+    } else {
+      rawConcept =
+        input.subtitle?.trim() ||
+        `A charming, commercial-quality ${input.category.replace('-', ' ')} titled "${title}"`;
+    }
+  }
+  const concept = rawConcept.replace(/[.!?]+$/, '').trim() || rawConcept;
+  const audience =
+    input.targetAudience?.trim() ||
+    (input.category === 'childrens-book'
+      ? 'Ages 3–7 & Parents'
+      : input.category === 'coloring-book'
+        ? 'Kids, Teens & Cozy Coloring Fans'
+        : input.category === 'art-print'
+          ? 'Home Decor & Digital Print Buyers'
+          : 'Everyday Planners & Gift Buyers');
+  const artStylePreset =
+    input.artStylePreset?.trim() || pickStylePresetForProduct(input.category, concept);
+  const now = new Date().toISOString();
+
+  if (input.category === 'coloring-book') {
+    return {
+      targetAudience: audience,
+      conceptSummary: concept,
+      artStylePreset,
+      manuscriptPrompt: `Write a friendly welcome page, coloring tips / marker blotter page note, and a numbered list of ${Math.min(Math.max(input.pageCount, 12), 40)} unique coloring page ideas for "${title}" (${audience}). Concept: ${concept}.`,
+      kdpMetadataPrompt: `Write an Amazon KDP & Etsy listing for the coloring book "${title}" (${input.trimSize}", ${input.pageCount} pages, audience: ${audience}). Concept: ${concept}. Provide 3 subtitle ideas, bullet-point book description, BISAC categories, and 7 high-intent KDP backend keywords.`,
+      coverPrompt: `Vibrant, inviting full-color book cover illustration for "${title}". Showcase the core theme: ${concept}. Crisp commercial layout with clean open space at the top for the book title. No garbled text.`,
+      interiorPrompts: [
+        {
+          id: 'page-1',
+          title: 'Page 1 — Opening Coloring Plate',
+          prompt: `Crisp black-and-white bold ink line art coloring page for "${title}". Opening scene based on: ${concept}. Thick clean outlines, pure white background, no shading, ready for ${input.trimSize}" printing.`,
+        },
+        {
+          id: 'page-2',
+          title: 'Page 2 — Cozy Detail Scene',
+          prompt: `Crisp black-and-white bold ink line art coloring page for "${title}". Feature charming close-up details and characters inspired by: ${concept}. Bold clean lines on pure white paper.`,
+        },
+        {
+          id: 'page-3',
+          title: 'Page 3 — Playful Adventure Scene',
+          prompt: `Crisp black-and-white bold ink line art coloring page for "${title}". Show a joyful active moment from: ${concept}. Large friendly shapes, crisp black outlines, zero gray fill.`,
+        },
+        {
+          id: 'page-4',
+          title: 'Page 4 — Celebration Finale Page',
+          prompt: `Crisp black-and-white bold ink line art coloring page for "${title}". A warm, happy closing scene celebrating: ${concept}. Clean margins for ${input.trimSize}" KDP printing.`,
+        },
+      ],
+      updatedAt: now,
+    };
+  }
+
+  if (input.category === 'art-print') {
+    return {
+      targetAudience: audience,
+      conceptSummary: concept,
+      artStylePreset,
+      manuscriptPrompt: `Write a cohesive collection note and home-printing / framing care sheet for the printable art set "${title}" (${input.trimSize}"). Theme: ${concept}.`,
+      kdpMetadataPrompt: `Write an Etsy & digital storefront listing for the printable wall art collection "${title}" (${input.trimSize}", audience: ${audience}). Concept: ${concept}. Include SEO title, scannable description, print size details, and 7 high-intent search tags.`,
+      coverPrompt: `Flagship hero archival art print for "${title}". Theme: ${concept}. Balanced gallery-worthy composition, clean edges, zero text or watermarks.`,
+      interiorPrompts: [
+        {
+          id: 'page-1',
+          title: 'Print 1 — Hero Artwork',
+          prompt: `High-resolution archival printable wall art #1 for "${title}". Core subject: ${concept}. Cohesive refined palette on clean background.`,
+        },
+        {
+          id: 'page-2',
+          title: 'Print 2 — Companion Composition',
+          prompt: `Matching companion wall art print #2 for "${title}" designed to pair in a gallery set. Concept: ${concept}.`,
+        },
+        {
+          id: 'page-3',
+          title: 'Print 3 — Atmospheric Detail Study',
+          prompt: `Cohesive wall art print #3 for "${title}" exploring a close-up botanical or scenic detail from: ${concept}.`,
+        },
+        {
+          id: 'page-4',
+          title: 'Print 4 — Minimalist Accent Print',
+          prompt: `Minimalist complementary wall art print #4 completing the "${title}" ${input.trimSize}" gallery bundle.`,
+        },
+      ],
+      updatedAt: now,
+    };
+  }
+
+  if (input.category === 'journal') {
+    return {
+      targetAudience: audience,
+      conceptSummary: concept,
+      artStylePreset,
+      manuscriptPrompt: `Write the introduction, section headers, and guided prompts/exercises for "${title}" (${input.pageCount} pages, audience: ${audience}). Concept: ${concept}.`,
+      kdpMetadataPrompt: `Write an Amazon KDP & Etsy listing for "${title}" (${input.trimSize}", ${input.pageCount} pages, audience: ${audience}). Concept: ${concept}. Include 3 subtitle ideas, benefit-led description, categories, and 7 high-intent search keywords.`,
+      coverPrompt: `Clean, elevated cover artwork for "${title}" (${audience}). Visual theme: ${concept}. Tasteful editorial composition with open upper framing for the title, no garbled text.`,
+      interiorPrompts: [
+        {
+          id: 'page-1',
+          title: 'Section Divider 1 — Welcome & Intention',
+          prompt: `Clean editorial divider illustration for Section 1 of "${title}". Concept: ${concept}. Calm balanced framing for ${input.trimSize}" printing.`,
+        },
+        {
+          id: 'page-2',
+          title: 'Section Divider 2 — Daily Focus',
+          prompt: `Clean editorial divider illustration for Section 2 of "${title}" reinforcing daily rhythm and clarity. Concept: ${concept}.`,
+        },
+        {
+          id: 'page-3',
+          title: 'Section Divider 3 — Reflection & Growth',
+          prompt: `Warm, motivating editorial illustration for Section 3 of "${title}" tailored to ${audience}.`,
+        },
+      ],
+      updatedAt: now,
+    };
+  }
+
+  // Default: Children's Book
+  return {
+    targetAudience: audience,
+    conceptSummary: concept,
+    artStylePreset,
+    manuscriptPrompt: `Write an engaging, read-aloud 8-spread children's picture book manuscript for "${title}" (${audience}). Story concept: ${concept}. Structure clearly as Spread 1 through Spread 8 with warm rhythmic prose and a short visual direction line for each spread.`,
+    kdpMetadataPrompt: `Write an Amazon KDP book listing for the children's picture book "${title}" (${input.trimSize}", ${input.pageCount} pages, ${audience}). Concept: ${concept}. Include 3 subtitle options, parent-friendly back-cover blurb, 2 BISAC categories, and 7 high-intent KDP backend keywords.`,
+    coverPrompt: `Enchanting children's picture book front cover illustration for "${title}". Showcase the main character in an iconic, joyful moment from: ${concept}. Warm storybook lighting, open framing at the top for the book title, no garbled text.`,
+    interiorPrompts: [
+      {
+        id: 'page-1',
+        title: 'Spread 1 — Opening Scene',
+        prompt: `Children's picture book illustration for Spread 1 of "${title}". Introduce the main character and cozy world from: ${concept}. Warm welcoming composition, ${input.trimSize}" square framing.`,
+      },
+      {
+        id: 'page-2',
+        title: 'Spread 2 — The Big Discovery',
+        prompt: `Children's picture book illustration for Spread 2 of "${title}". Show the exciting moment of curiosity and adventure from: ${concept}. Expressive character pose, vibrant storybook atmosphere.`,
+      },
+      {
+        id: 'page-3',
+        title: 'Spread 3 — Heart of the Story',
+        prompt: `Children's picture book illustration for Spread 3 of "${title}". Capture a playful, heartfelt moment of friendship or problem-solving from: ${concept}. Cohesive color palette.`,
+      },
+      {
+        id: 'page-4',
+        title: 'Spread 4 — Cozy Happy Ending',
+        prompt: `Children's picture book illustration for the finale of "${title}". Show a joyful, comforting closing scene wrapping up: ${concept}. Warm golden light, storybook charm.`,
+      },
+    ],
+    updatedAt: now,
+  };
+}
+
+export function buildPlanStepsFromPromptPack(
+  product: Pick<Product, 'title' | 'trimSize' | 'includeBleed'>,
+  pack: ProductPromptPack
+): Array<{
+  title: string;
+  stepType: 'manuscript' | 'illustration' | 'export';
+  prompt: string;
+}> {
+  const steps: Array<{
+    title: string;
+    stepType: 'manuscript' | 'illustration' | 'export';
+    prompt: string;
+  }> = [];
+
+  if (pack.manuscriptPrompt.trim()) {
+    steps.push({
+      title: 'Story / Interior Manuscript Copy',
+      stepType: 'manuscript',
+      prompt: pack.manuscriptPrompt.trim(),
+    });
+  }
+
+  if (pack.coverPrompt.trim()) {
+    steps.push({
+      title: 'Front Cover Artwork',
+      stepType: 'illustration',
+      prompt: pack.coverPrompt.trim(),
+    });
+  }
+
+  for (const page of pack.interiorPrompts) {
+    if (page.prompt.trim()) {
+      steps.push({
+        title: page.title.trim() || 'Interior Illustration',
+        stepType: 'illustration',
+        prompt: page.prompt.trim(),
+      });
+    }
+  }
+
+  steps.push({
+    title: `Assemble ${product.trimSize}" Print-Ready PDF`,
+    stepType: 'export',
+    prompt: `Assemble "${product.title}" assets into a ${product.trimSize} in ${
+      product.includeBleed ? 'full-bleed ' : ''
+    }print-ready KDP PDF.`,
+  });
+
+  return steps;
+}
+
+export interface ProductReadinessSummary {
+  hasConcept: boolean;
+  hasPrompts: boolean;
+  hasManuscript: boolean;
+  hasCover: boolean;
+  interiorCount: number;
+  exportCount: number;
+  completedMilestones: number;
+  totalMilestones: number;
+  recommendedStep: 1 | 2 | 3 | 4;
+  nextActionLabel: string;
+}
+
+export function computeProductReadiness(
+  product: Product,
+  assets: StorageAsset[],
+  generations: GenerationRecord[],
+  exportsList: ExportArtifact[]
+): ProductReadinessSummary {
+  const productAssets = assets.filter(
+    (a) => a.productId === product.id && a.kind !== 'reference'
+  );
+  const productGens = generations.filter((g) => g.productId === product.id);
+  const productExports = exportsList.filter((e) => e.productId === product.id);
+
+  const hasConcept = product.title.trim().length >= 2;
+  const hasPrompts = Boolean(
+    product.promptPack &&
+      (product.promptPack.coverPrompt.trim() ||
+        product.promptPack.manuscriptPrompt.trim() ||
+        product.promptPack.interiorPrompts.length > 0)
+  );
+  const trimmedNotes = product.manuscriptNotes.trim();
+  const isBriefOnly = trimmedNotes.startsWith('[TREND RESEARCH BRIEF]') && trimmedNotes.length < 1600;
+  const hasManuscript =
+    (!isBriefOnly && trimmedNotes.length > 260) ||
+    productGens.some((g) => g.mode === 'manuscript' || g.mode === 'kdp-metadata');
+  const hasCover = Boolean(
+    product.coverAssetId || productAssets.some((a) => a.kind === 'cover')
+  );
+  const interiorCount = productAssets.length;
+  const exportCount = productExports.length;
+
+  const milestones = [
+    hasConcept,
+    hasPrompts,
+    hasCover || interiorCount > 0 || hasManuscript,
+    exportCount > 0,
+  ];
+  const completedMilestones = milestones.filter(Boolean).length;
+
+  let recommendedStep: 1 | 2 | 3 | 4 = 1;
+  let nextActionLabel = 'Generate Editable Prompts';
+  if (!hasPrompts) {
+    recommendedStep = 1;
+    nextActionLabel = 'Auto-Fill Prompts';
+  } else if (interiorCount === 0 && !hasManuscript) {
+    recommendedStep = 2;
+    nextActionLabel = 'Edit & Run Prompts';
+  } else if (exportCount === 0) {
+    recommendedStep = 3;
+    nextActionLabel = 'Review & Export PDF';
+  } else {
+    recommendedStep = 4;
+    nextActionLabel = 'Download Finished PDF';
+  }
+
+  return {
+    hasConcept,
+    hasPrompts,
+    hasManuscript,
+    hasCover,
+    interiorCount,
+    exportCount,
+    completedMilestones,
+    totalMilestones: 4,
+    recommendedStep,
+    nextActionLabel,
+  };
+}
+
 export interface TrendProjectSeed {
   productDraft: {
     title: string;
@@ -639,6 +1157,7 @@ export interface TrendProjectSeed {
     includeBleed: boolean;
     manuscriptNotes: string;
   };
+  promptPack: ProductPromptPack;
   planName: string;
   planSteps: Array<{
     title: string;
@@ -649,7 +1168,7 @@ export interface TrendProjectSeed {
 
 /**
  * Converts a researched trend opportunity (and optional deep-dive) into a pre-filled
- * Studio Product draft and a ready-to-queue Batch Generation Plan.
+ * Studio Product draft, an editable ProductPromptPack, and a ready-to-queue Batch Plan.
  */
 export function mapTrendOpportunityToProjectSeed(
   opportunity: TrendOpportunity,
@@ -704,28 +1223,11 @@ export function mapTrendOpportunityToProjectSeed(
     160
   );
 
-  const planSteps: TrendProjectSeed['planSteps'] = [
-    {
-      title: 'Listing Copy, Outline & Keyword Pack',
-      stepType: 'manuscript',
-      prompt: `Draft the core outline, marketplace listing description, and content structure for "${opportunity.title}" targeting ${opportunity.starter_blueprint.target_age_or_audience}. Hook: ${opportunity.starter_blueprint.hook_concept}. Winning angle: ${deepDive?.differentiation_angle || opportunity.winning_angle}. Incorporate keywords: ${keywords.slice(0, 7).join(', ')}.`,
-    },
-    {
-      title: 'Cover / Hero Visual Concept',
-      stepType: 'illustration',
-      prompt: `Create the hero cover artwork for "${opportunity.title}" (${opportunity.product_type}). Hook concept: ${opportunity.starter_blueprint.hook_concept}. Art direction: ${opportunity.starter_blueprint.art_style_direction}.`,
-    },
-    {
-      title: 'Signature Interior Plate / Spread 01',
-      stepType: 'illustration',
-      prompt: `Create the flagship interior page or spread for "${opportunity.title}" tailored for ${opportunity.starter_blueprint.target_age_or_audience}. Art direction: ${opportunity.starter_blueprint.art_style_direction}. Ensure clean composition suitable for ${trimSize} printing.`,
-    },
-    {
-      title: `Assemble ${trimSize}" Print-Ready PDF`,
-      stepType: 'export',
-      prompt: `Assemble ordered product assets into a ${trimSize} in ${includeBleed ? 'full-bleed ' : ''}print-ready PDF for ${opportunity.marketplaces.join(' & ')}.`,
-    },
-  ];
+  const promptPack = buildPromptPackFromTrend(opportunity, deepDive);
+  const planSteps = buildPlanStepsFromPromptPack(
+    { title: opportunity.title.slice(0, 120), trimSize, includeBleed },
+    promptPack
+  );
 
   return {
     productDraft: {
@@ -738,6 +1240,7 @@ export function mapTrendOpportunityToProjectSeed(
       includeBleed,
       manuscriptNotes: notesSections.join('\n').slice(0, 10000),
     },
+    promptPack,
     planName: `${opportunity.title.slice(0, 62)} — Starter Batch`,
     planSteps,
   };

@@ -276,8 +276,8 @@ export function TrendsView({
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
               Run live web searches across Amazon KDP, Etsy, Teachers Pay Teachers, and Gumroad to find
-              verified niche demand, separate observed proof from estimates, and launch a pre-filled Studio
-              project in one click.
+              verified niche demand. Click any winning trend to auto-generate editable prompts for your cover,
+              story copy, KDP listing, and interior pages.
             </p>
           </div>
           <div className="shrink-0 font-mono text-xs text-slate-500 tabular-nums">
@@ -968,9 +968,9 @@ export function TrendsView({
                           <button
                             type="button"
                             onClick={() => onOpenExistingProject(opp.created_project_id!)}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 whitespace-nowrap shrink-0"
                           >
-                            Open Studio Project
+                            Edit Prompts &amp; Build
                             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
                         ) : (
@@ -983,12 +983,12 @@ export function TrendsView({
                             {isCreating ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                                Creating project…
+                                Generating editable prompts…
                               </>
                             ) : (
                               <>
                                 <FolderPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                                Turn into Studio Project
+                                Use Trend &amp; Generate Prompts
                               </>
                             )}
                           </button>

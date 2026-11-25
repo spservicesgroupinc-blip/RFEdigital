@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import { ListPlus, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ListPlus, Pencil, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
 import type { BatchPlan, KdpTrimSize, Product, ProductCategory } from '../types/workspace';
-import { PLAN_TEMPLATES } from '../lib/workspaceLogic';
+import {
+  PLAN_TEMPLATES,
+  buildPlanStepsFromPromptPack,
+  buildPromptPackFromConcept,
+} from '../lib/workspaceLogic';
 
 interface PlanningViewProps {
   products: Product[];
@@ -24,6 +28,17 @@ interface PlanningViewProps {
       prompt: string;
     }>;
   }) => Promise<void>;
+  onUpdatePlan: (
+    planId: string,
+    payload: {
+      name: string;
+      steps: Array<{
+        title: string;
+        stepType: 'manuscript' | 'illustration' | 'export';
+        prompt: string;
+      }>;
+    }
+  ) => Promise<void>;
   onGenerateOutline: (payload: {
     productId?: string;
     productTitle?: string;
@@ -44,14 +59,18 @@ export function PlanningView({
   onSelectProduct,
   onQuickCreateProduct,
   onCreatePlan,
+  onUpdatePlan,
   onGenerateOutline,
   onQueuePlan,
   onDeletePlan,
 }: PlanningViewProps) {
   const productId = activeProductId || products[0]?.id || '';
+  const selectedProduct = products.find((p) => p.id === productId) ?? null;
+
   const [selectedTemplateId, setSelectedTemplateId] = useState(PLAN_TEMPLATES[0].id);
   const [creatingNewProduct, setCreatingNewProduct] = useState(false);
   const [newProductTitle, setNewProductTitle] = useState('');
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [planName, setPlanName] = useState('Picture Book Production Batch');
   const [outlineBrief, setOutlineBrief] = useState('');
   const [draftSteps, setDraftSteps] = useState(PLAN_TEMPLATES[0].starterSteps);
@@ -59,6 +78,37 @@ export function PlanningView({
   const [saving, setSaving] = useState(false);
   const [queuingId, setQueuingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // Auto-populate Batch Plan Builder with the selected product's editable prompts or latest plan
+  useEffect(() => {
+    if (!selectedProduct || creatingNewProduct) return;
+    const existingPlan = plans.find((p) => p.productId === selectedProduct.id);
+    if (existingPlan) {
+      setEditingPlanId(existingPlan.id);
+      setPlanName(existingPlan.name);
+      setDraftSteps(
+        existingPlan.steps.map((s) => ({
+          title: s.title,
+          stepType: s.stepType,
+          prompt: s.prompt,
+        }))
+      );
+      return;
+    }
+    setEditingPlanId(null);
+    const effectivePack =
+      selectedProduct.promptPack ??
+      buildPromptPackFromConcept({
+        title: selectedProduct.title,
+        subtitle: selectedProduct.subtitle,
+        category: selectedProduct.category,
+        trimSize: selectedProduct.trimSize,
+        pageCount: selectedProduct.pageCount,
+        concept: selectedProduct.manuscriptNotes || selectedProduct.subtitle || selectedProduct.title,
+      });
+    setPlanName(`${selectedProduct.title.slice(0, 62)} — Production Batch`);
+    setDraftSteps(buildPlanStepsFromPromptPack(selectedProduct, effectivePack));
+  }, [selectedProduct?.id, creatingNewProduct]);
 
   const showNewProductInput = products.length === 0 || creatingNewProduct;
   const activeTemplate =
@@ -133,12 +183,19 @@ export function PlanningView({
         setNewProductTitle('');
       }
 
-      await onCreatePlan({
-        productId: targetProductId,
-        name: planName.trim(),
-        templateId: selectedTemplateId,
-        steps: draftSteps,
-      });
+      if (editingPlanId && !showNewProductInput) {
+        await onUpdatePlan(editingPlanId, {
+          name: planName.trim(),
+          steps: draftSteps,
+        });
+      } else {
+        await onCreatePlan({
+          productId: targetProductId,
+          name: planName.trim(),
+          templateId: selectedTemplateId,
+          steps: draftSteps,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save batch plan.');
     } finally {
@@ -396,14 +453,29 @@ export function PlanningView({
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap shrink-0"
-            >
-              <ListPlus className="h-4 w-4" aria-hidden="true" />
-              {saving ? 'Saving Plan…' : 'Save Batch Plan'}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap shrink-0"
+              >
+                <ListPlus className="h-4 w-4" aria-hidden="true" />
+                {saving
+                  ? 'Saving Plan…'
+                  : editingPlanId && !showNewProductInput
+                    ? 'Update Plan Prompts'
+                    : 'Save Batch Plan'}
+              </button>
+              {editingPlanId && !showNewProductInput && (
+                <button
+                  type="button"
+                  onClick={() => setEditingPlanId(null)}
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  Save as new plan instead
+                </button>
+              )}
+            </div>
           </form>
         </section>
 
@@ -472,19 +544,41 @@ export function PlanningView({
                       ))}
                     </ol>
 
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                       <span className="text-xs text-slate-500 tabular-nums">
                         {unqueuedCount} step{unqueuedCount === 1 ? '' : 's'} ready to queue
                       </span>
-                      <button
-                        type="button"
-                        disabled={unqueuedCount === 0 || queuingId === plan.id}
-                        onClick={() => handleQueuePlan(plan.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-blue-800 disabled:opacity-45 whitespace-nowrap shrink-0"
-                      >
-                        <Play className="h-3 w-3" aria-hidden="true" />
-                        {queuingId === plan.id ? 'Queuing…' : 'Queue Batch Jobs'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCreatingNewProduct(false);
+                            onSelectProduct(plan.productId);
+                            setEditingPlanId(plan.id);
+                            setPlanName(plan.name);
+                            setDraftSteps(
+                              plan.steps.map((s) => ({
+                                title: s.title,
+                                stepType: s.stepType,
+                                prompt: s.prompt,
+                              }))
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                        >
+                          <Pencil className="h-3 w-3" aria-hidden="true" />
+                          Edit Prompts
+                        </button>
+                        <button
+                          type="button"
+                          disabled={unqueuedCount === 0 || queuingId === plan.id}
+                          onClick={() => handleQueuePlan(plan.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-blue-800 disabled:opacity-45 whitespace-nowrap shrink-0"
+                        >
+                          <Play className="h-3 w-3" aria-hidden="true" />
+                          {queuingId === plan.id ? 'Queuing…' : 'Queue Batch Jobs'}
+                        </button>
+                      </div>
                     </div>
                   </article>
                 );

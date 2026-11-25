@@ -7,6 +7,7 @@ import {
   FileDown,
   FolderKanban,
   KeyRound,
+  Layers,
   Menu,
   Plus,
   Sparkles,
@@ -18,6 +19,7 @@ import type {
   KdpTrimSize,
   ModuleId,
   ProductCategory,
+  PromptPrefillRequest,
   WorkspaceSnapshot,
 } from './types/workspace';
 import { workspaceApi } from './lib/api';
@@ -29,27 +31,32 @@ import {
 } from './lib/googleAuth';
 import { LibraryView } from './components/LibraryView';
 import { TrendsView } from './components/TrendsView';
+import { ProductBuilderView, type BuilderStep } from './components/ProductBuilderView';
 import { StorageView } from './components/StorageView';
 import { GenerationView } from './components/GenerationView';
 import { PlanningView } from './components/PlanningView';
 import { JobsView } from './components/JobsView';
 import { ExportView } from './components/ExportView';
 import { IdentityView } from './components/IdentityView';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 const NAV_ITEMS: Array<{
   id: ModuleId;
+  group: 'create' | 'tools';
   label: string;
   caption: string;
   icon: typeof BookOpen;
 }> = [
-  { id: 'library', label: 'Library', caption: 'Books & Series', icon: BookOpen },
-  { id: 'trends', label: 'Trends', caption: 'Market Research', icon: TrendingUp },
-  { id: 'storage', label: 'Storage', caption: 'Product Folders', icon: FolderKanban },
-  { id: 'generation', label: 'Generation', caption: 'AI Prompt Studio', icon: Sparkles },
-  { id: 'planning', label: 'Planning', caption: 'Outlines & Batches', icon: CalendarRange },
-  { id: 'jobs', label: 'Jobs', caption: 'Background Queue', icon: Cpu },
-  { id: 'export', label: 'Export', caption: 'KDP PDF & ZIP', icon: FileDown },
-  { id: 'identity', label: 'Identity', caption: 'Accounts & Tokens', icon: KeyRound },
+  { id: 'library', group: 'create', label: 'My Products', caption: 'Catalog & Books', icon: BookOpen },
+  { id: 'trends', group: 'create', label: 'Market Trends', caption: 'Find Niches', icon: TrendingUp },
+  { id: 'builder', group: 'create', label: 'Product Builder', caption: '4-Step Flow', icon: Layers },
+  { id: 'generation', group: 'tools', label: 'Prompt Studio', caption: 'Photo & AI Art', icon: Sparkles },
+  { id: 'planning', group: 'tools', label: 'Batch Plans', caption: 'Multi-Step Plans', icon: CalendarRange },
+  { id: 'jobs', group: 'tools', label: 'Job Queue', caption: 'Background Runs', icon: Cpu },
+  { id: 'storage', group: 'tools', label: 'Files & Storage', caption: 'Product Folders', icon: FolderKanban },
+  { id: 'export', group: 'tools', label: 'Export PDF', caption: 'KDP PDF & ZIP', icon: FileDown },
+  { id: 'identity', group: 'tools', label: 'Settings & Sync', caption: 'Google & Keys', icon: KeyRound },
 ];
 
 function getInitialModuleFromPath(): ModuleId {
@@ -57,6 +64,7 @@ function getInitialModuleFromPath(): ModuleId {
   const validIds: ModuleId[] = [
     'library',
     'trends',
+    'builder',
     'storage',
     'generation',
     'planning',
@@ -70,6 +78,8 @@ function getInitialModuleFromPath(): ModuleId {
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>(() => getInitialModuleFromPath());
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
+  const [builderStep, setBuilderStep] = useState<BuilderStep | undefined>(undefined);
+  const [promptPrefill, setPromptPrefill] = useState<PromptPrefillRequest | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -256,9 +266,22 @@ export default function App() {
     setActiveModule(module);
   };
 
+  const openBuilderForProduct = (productId: string, step?: BuilderStep) => {
+    setActiveProductId(productId);
+    setBuilderStep(step ?? 2);
+    setActiveModule('builder');
+  };
+
   const openIllustrationForProduct = (productId: string) => {
     setActiveProductId(productId);
     setGenerationInitialMode('illustration');
+    setActiveModule('generation');
+  };
+
+  const openPromptStudioWithPrefill = (req: Omit<PromptPrefillRequest, 'nonce'>) => {
+    setActiveProductId(req.productId);
+    setGenerationInitialMode(req.mode);
+    setPromptPrefill({ ...req, nonce: Date.now() });
     setActiveModule('generation');
   };
 
@@ -291,10 +314,11 @@ export default function App() {
         <button
           type="button"
           onClick={() => setShowNewProductModal(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 whitespace-nowrap shrink-0"
+          className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 sm:px-3.5 whitespace-nowrap shrink-0"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          New Product
+          <span className="sm:hidden">New</span>
+          <span className="hidden sm:inline">New Product</span>
         </button>
       );
     }
@@ -304,9 +328,9 @@ export default function App() {
           type="button"
           disabled={runningStep || queuedJobsCount === 0}
           onClick={() => handleRunNextJob()}
-          className="rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-45 whitespace-nowrap shrink-0"
+          className="rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-45 sm:px-3.5 whitespace-nowrap shrink-0"
         >
-          {runningStep ? 'Processing…' : 'Process Next Step'}
+          {runningStep ? 'Processing…' : 'Run Step'}
         </button>
       );
     }
@@ -317,16 +341,32 @@ export default function App() {
           setActiveModule('library');
           setShowNewProductModal(true);
         }}
-        className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 whitespace-nowrap shrink-0"
+        className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 sm:px-3.5 whitespace-nowrap shrink-0"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        New Product
+        <span className="sm:hidden">New</span>
+        <span className="hidden sm:inline">New Product</span>
       </button>
     );
   };
 
+  const MOBILE_PRIMARY_TABS: Array<{
+    id: ModuleId;
+    label: string;
+    icon: typeof BookOpen;
+  }> = [
+    { id: 'library', label: 'Products', icon: BookOpen },
+    { id: 'trends', label: 'Trends', icon: TrendingUp },
+    { id: 'builder', label: 'Build', icon: Layers },
+    { id: 'generation', label: 'Studio', icon: Sparkles },
+  ];
+
+  const isSecondaryModuleActive = !MOBILE_PRIMARY_TABS.some((t) => t.id === activeModule);
+  const createNavItems = NAV_ITEMS.filter((i) => i.group === 'create');
+  const toolNavItems = NAV_ITEMS.filter((i) => i.group === 'tools');
+
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip bg-[#F8FAFC] text-slate-900">
       {/* Desktop Sidebar (252px) */}
       <aside className="hidden w-[252px] shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex h-16 items-center border-b border-slate-200 px-6">
@@ -342,41 +382,73 @@ export default function App() {
           </a>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3" aria-label="Workspace modules">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = activeModule === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={active ? 'page' : undefined}
-                onClick={() => setActiveModule(item.id)}
-                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left transition-colors ${
-                  active
-                    ? 'bg-blue-50 text-blue-800'
-                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <Icon
-                    className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
-                    aria-hidden="true"
-                  />
-                  <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-                </span>
-                {item.id === 'jobs' && queuedJobsCount > 0 ? (
-                  <span className="font-mono text-xs font-medium text-amber-700 tabular-nums">
-                    {queuedJobsCount}
+        <nav className="flex-1 overflow-y-auto p-3" aria-label="Workspace modules">
+          <div className="px-3 pb-1.5 pt-1 text-[11px] font-semibold tracking-wide text-slate-400">
+            Create
+          </div>
+          <div className="space-y-1">
+            {createNavItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeModule === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setActiveModule(item.id)}
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'bg-blue-50 text-blue-800'
+                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon
+                      className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
+                      aria-hidden="true"
+                    />
+                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
                   </span>
-                ) : (
-                  <span className="text-[11px] text-slate-400 whitespace-nowrap">
-                    {item.caption.split(' ')[0]}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 border-t border-slate-100 px-3 pb-1.5 pt-4 text-[11px] font-semibold tracking-wide text-slate-400">
+            Tools
+          </div>
+          <div className="space-y-1">
+            {toolNavItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeModule === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setActiveModule(item.id)}
+                  className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors ${
+                    active
+                      ? 'bg-blue-50 text-blue-800'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon
+                      className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
+                      aria-hidden="true"
+                    />
+                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
                   </span>
-                )}
-              </button>
-            );
-          })}
+                  {item.id === 'jobs' && queuedJobsCount > 0 && (
+                    <span className="font-mono text-xs font-medium text-amber-700 tabular-nums">
+                      {queuedJobsCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </nav>
 
         <div className="border-t border-slate-200 p-4 text-xs">
@@ -386,7 +458,7 @@ export default function App() {
           <div className="mt-1 text-slate-500">
             {googleConnected
               ? `Google connected (${googleUser?.email ?? 'Active'})`
-              : 'Local studio · Connect Drive in Identity'}
+              : 'Local studio · Connect Drive in Settings'}
           </div>
         </div>
       </aside>
@@ -403,70 +475,148 @@ export default function App() {
             className="fixed inset-0 bg-slate-900/40"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="relative z-10 flex w-64 flex-col bg-white shadow-xl">
+          <div className="safe-top safe-bottom relative z-10 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
             <div className="flex h-15 items-center justify-between border-b border-slate-200 px-5">
-              <span className="font-display text-lg font-bold text-slate-900">FolioPress</span>
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/pwa-192x192.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-7 w-7 rounded-md"
+                />
+                <span className="font-display text-lg font-bold text-slate-900">FolioPress</span>
+              </div>
               <button
                 type="button"
                 aria-label="Close navigation menu"
                 onClick={() => setMobileNavOpen(false)}
-                className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+                className="rounded p-2 text-slate-500 hover:bg-slate-100"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-            <nav className="flex-1 space-y-1 p-3">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = activeModule === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveModule(item.id);
-                      setMobileNavOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium ${
-                      active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
+            <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+              <div>
+                <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400">
+                  Create
+                </div>
+                <div className="space-y-1">
+                  {createNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = activeModule === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => {
+                          setActiveModule(item.id);
+                          setMobileNavOpen(false);
+                        }}
+                        className={`flex min-h-[44px] w-full items-center justify-between gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium ${
+                          active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <span>{item.label}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400">{item.caption}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400">
+                  Tools
+                </div>
+                <div className="space-y-1">
+                  {toolNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = activeModule === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => {
+                          setActiveModule(item.id);
+                          setMobileNavOpen(false);
+                        }}
+                        className={`flex min-h-[44px] w-full items-center justify-between gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium ${
+                          active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <span>{item.label}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400">{item.caption}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </nav>
+            <div className="space-y-3 border-t border-slate-200 p-4">
+              <PWAInstallButton
+                variant="full"
+                onInstalled={() => {
+                  setMobileNavOpen(false);
+                  showNotice('FolioPress installed to your device home screen.');
+                }}
+              />
+              <div className="text-xs text-slate-500">
+                <div className="font-medium text-slate-800">
+                  {workspace?.settings.authorImprint ?? 'FolioPress Studio'}
+                </div>
+                <div className="mt-0.5 truncate">
+                  {googleConnected
+                    ? `Google connected (${googleUser?.email ?? 'Active'})`
+                    : 'Local studio · Connect Drive in Identity'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Clean SaaS Top Bar: Breadcrumb left, single contextual action right */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white px-5 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Open navigation menu"
-              className="rounded-md border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 lg:hidden"
-            >
-              <Menu className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <div className="flex items-center gap-2 text-sm whitespace-nowrap">
-              <span className="font-medium text-slate-500">Workspace</span>
-              <span className="text-slate-300" aria-hidden="true">
-                /
-              </span>
-              <h1 className="font-display text-base font-semibold text-slate-900">
-                {activeNav.label}
-              </h1>
+        {/* Clean SaaS Top Bar: Breadcrumb left, Install + contextual action right */}
+        <header className="safe-top sticky top-0 z-30 border-b border-slate-200 bg-white">
+          <div className="flex h-14 items-center justify-between gap-2 px-4 sm:h-16 sm:gap-4 sm:px-5 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open navigation menu"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 lg:hidden"
+              >
+                <Menu className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <div className="flex min-w-0 items-center gap-2 text-sm whitespace-nowrap">
+                <span className="hidden font-medium text-slate-500 sm:inline">Workspace</span>
+                <span className="hidden text-slate-300 sm:inline" aria-hidden="true">
+                  /
+                </span>
+                <h1 className="truncate font-display text-base font-semibold text-slate-900">
+                  {activeNav.label}
+                </h1>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-4 shrink-0">
-            {renderPrimaryHeaderAction()}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <PWAInstallButton
+                variant="header"
+                onInstalled={() =>
+                  showNotice('FolioPress installed! Launch anytime from your home screen.')
+                }
+              />
+              {renderPrimaryHeaderAction()}
+            </div>
           </div>
         </header>
 
@@ -474,7 +624,7 @@ export default function App() {
         {notice && (
           <div
             role="status"
-            className={`border-b px-5 py-2.5 text-xs font-medium lg:px-8 ${
+            className={`border-b px-4 py-2.5 text-xs font-medium sm:px-5 lg:px-8 ${
               notice.tone === 'error'
                 ? 'border-red-200 bg-red-50 text-red-800'
                 : 'border-blue-200 bg-blue-50 text-blue-900'
@@ -484,8 +634,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Active Module Viewport */}
-        <main className="mx-auto w-full max-w-[1320px] flex-1 px-5 py-6 lg:px-8">
+        {/* Active Module Viewport (extra bottom clearance on mobile for bottom tab bar) */}
+        <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 py-4 pb-24 sm:px-5 sm:py-6 sm:pb-24 lg:px-8 lg:pb-8">
           {loading ? (
             <div className="space-y-4">
               <div className="h-24 animate-pulse rounded-lg border border-slate-200 bg-white" />
@@ -511,6 +661,8 @@ export default function App() {
                   products={workspace.products}
                   series={workspace.series}
                   assets={workspace.assets}
+                  generations={workspace.generations}
+                  exportsList={workspace.exports}
                   settings={workspace.settings}
                   googleConnected={googleConnected}
                   showNewProductModal={showNewProductModal}
@@ -518,6 +670,7 @@ export default function App() {
                   onOpenNewProductModal={() => setShowNewProductModal(true)}
                   onOpenModuleForProduct={openModuleForProduct}
                   onOpenIllustrationForProduct={openIllustrationForProduct}
+                  onOpenBuilderForProduct={openBuilderForProduct}
                   onBootstrapGoogleSheet={handleBootstrapGoogleSheet}
                   onSyncGoogleSheets={handleSyncGoogleSheets}
                   onCreateProduct={async (payload) => {
@@ -526,8 +679,8 @@ export default function App() {
                     setActiveProductId(product.id);
                     showNotice(
                       referenceAsset
-                        ? `Created "${product.title}" with attached reference photo — ready for cartoon generation.`
-                        : `Created "${product.title}" and initialized product storage folder.`
+                        ? `Created "${product.title}" with reference photo & editable prompts ready.`
+                        : `Created "${product.title}" — review and edit your auto-filled prompts below.`
                     );
                     return product;
                   }}
@@ -585,18 +738,97 @@ export default function App() {
                     showNotice('Removed saved research scan.');
                   }}
                   onCreateProjectFromTrend={async (payload) => {
-                    const { product, plan } = await workspaceApi.createProjectFromTrend(payload);
+                    const { product } = await workspaceApi.createProjectFromTrend(payload);
                     await refreshWorkspace();
                     setActiveProductId(product.id);
-                    setActiveModule('planning');
+                    setBuilderStep(2);
+                    setActiveModule('builder');
                     showNotice(
-                      `Created Studio project "${product.title}" with ${plan.steps.length}-step starter batch plan.`
+                      `Generated editable prompts for "${product.title}" — review or tweak any prompt before generating.`
                     );
                   }}
                   onOpenExistingProject={(productId) => {
                     setActiveProductId(productId);
-                    setActiveModule('planning');
+                    setBuilderStep(2);
+                    setActiveModule('builder');
                   }}
+                />
+              )}
+
+              {activeModule === 'builder' && (
+                <ProductBuilderView
+                  products={workspace.products}
+                  assets={workspace.assets}
+                  generations={workspace.generations}
+                  exportsList={workspace.exports}
+                  settings={workspace.settings}
+                  activeProductId={activeProductId}
+                  initialStep={builderStep}
+                  googleConnected={googleConnected}
+                  onSelectProduct={setActiveProductId}
+                  onCreateProduct={async (payload) => {
+                    const { product } = await workspaceApi.createProduct(payload);
+                    await refreshWorkspace();
+                    setActiveProductId(product.id);
+                    return product;
+                  }}
+                  onUpdateProduct={async (id, payload) => {
+                    await workspaceApi.updateProduct(id, payload);
+                    await refreshWorkspace();
+                    if (payload.promptPack) {
+                      showNotice('Saved prompt edits.');
+                    } else if (payload.manuscriptNotes !== undefined) {
+                      showNotice('Saved manuscript copy.');
+                    }
+                  }}
+                  onGeneratePromptPack={async (payload) => {
+                    const { promptPack, usedAi } = await workspaceApi.generatePromptPack(payload);
+                    await refreshWorkspace();
+                    showNotice(
+                      usedAi
+                        ? 'Auto-filled editable prompts with AI — edit any section before generating.'
+                        : 'Auto-filled editable starter prompts — edit any section before generating.'
+                    );
+                    return promptPack;
+                  }}
+                  onGenerateText={async (payload) => {
+                    await workspaceApi.generateText(payload);
+                    await refreshWorkspace();
+                    showNotice('Generated copy saved to your product.');
+                  }}
+                  onGenerateIllustration={async (payload) => {
+                    const { asset } = await workspaceApi.generateIllustration(payload);
+                    await refreshWorkspace();
+                    showNotice(`Generated "${asset.name}" and saved to your product pages.`);
+                    return asset;
+                  }}
+                  onUploadAsset={async (payload) => {
+                    const { asset } = await workspaceApi.uploadAsset(payload);
+                    await refreshWorkspace();
+                    showNotice(`Uploaded "${asset.name}" to your product.`);
+                  }}
+                  onDeleteAsset={async (assetId) => {
+                    await workspaceApi.deleteAsset(assetId);
+                    await refreshWorkspace();
+                    showNotice('Removed page artwork.');
+                  }}
+                  onExportPdf={async (payload) => {
+                    const { artifact } = await workspaceApi.exportPdf(payload);
+                    await refreshWorkspace();
+                    showNotice(`Built finished KDP PDF (${artifact.pageCount} pages).`);
+                    return artifact;
+                  }}
+                  onExportBundle={async (payload) => {
+                    const { artifact } = await workspaceApi.exportBundle(payload);
+                    await refreshWorkspace();
+                    showNotice(`Packaged PNG bundle "${artifact.fileName}".`);
+                    return artifact;
+                  }}
+                  onUploadArtifactToDrive={(artifactId) =>
+                    handleUploadToDrive({ artifactId })
+                  }
+                  onOpenInPromptStudio={openPromptStudioWithPrefill}
+                  onGoToTrends={() => setActiveModule('trends')}
                 />
               )}
 
@@ -630,6 +862,8 @@ export default function App() {
                   settings={workspace.settings}
                   activeProductId={activeProductId}
                   initialMode={generationInitialMode}
+                  prefillRequest={promptPrefill}
+                  onClearPrefill={() => setPromptPrefill(null)}
                   onSelectProduct={setActiveProductId}
                   onQuickCreateProduct={(title) => handleQuickCreateProduct({ title })}
                   onGenerateText={async (payload) => {
@@ -661,6 +895,11 @@ export default function App() {
                     const { plan } = await workspaceApi.createPlan(payload);
                     await refreshWorkspace();
                     showNotice(`Saved batch plan "${plan.name}".`);
+                  }}
+                  onUpdatePlan={async (planId, payload) => {
+                    const { plan } = await workspaceApi.updatePlan(planId, payload);
+                    await refreshWorkspace();
+                    showNotice(`Updated prompts in "${plan.name}".`);
                   }}
                   onQueuePlan={async (planId) => {
                     const { jobs } = await workspaceApi.queuePlan(
@@ -787,6 +1026,49 @@ export default function App() {
             </>
           )}
         </main>
+
+        {/* Smartphone Bottom Tab Bar (Thumb-friendly native PWA navigation) */}
+        <nav
+          aria-label="Mobile quick navigation"
+          className="safe-bottom fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md lg:hidden"
+        >
+          <div className="grid h-16 grid-cols-5 items-stretch">
+            {MOBILE_PRIMARY_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeModule === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setActiveModule(tab.id)}
+                  className={`flex flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors ${
+                    active ? 'text-blue-700' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="More workspace modules"
+              className={`relative flex flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors ${
+                isSecondaryModuleActive ? 'text-blue-700' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Menu className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>More</span>
+              {queuedJobsCount > 0 && (
+                <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-amber-500" />
+              )}
+            </button>
+          </div>
+        </nav>
+
+        <OfflineIndicator />
       </div>
     </div>
   );

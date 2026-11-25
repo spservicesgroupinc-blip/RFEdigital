@@ -11,6 +11,15 @@
     font-family: var(--font-sans);
     color: #0f172a;
     background-color: #f8fafc;
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    min-height: 100dvh;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1,
@@ -23,6 +32,7 @@
   button:not(:disabled),
   a[href] {
     cursor: pointer;
+    touch-action: manipulation;
   }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
@@ -34,6 +44,28 @@
   textarea {
     line-height: 1.5;
   }
+
+  /* Prevent iOS Safari automatic zoom when focusing form fields on smartphones */
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .tabular-nums {

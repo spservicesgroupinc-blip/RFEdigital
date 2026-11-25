@@ -11,6 +11,7 @@ import {
   workspaceStore,
 } from './server/store';
 import {
+  generateProductPromptPackWithAI,
   generatePublishingText,
   generateSeriesPlanSteps,
   generateStorybookIllustration,
@@ -26,6 +27,8 @@ import {
   readCodeGsSource,
 } from './server/appsScriptBridge';
 import {
+  buildPlanStepsFromPromptPack,
+  buildPromptPackFromConcept,
   expandPlanToJobs,
   getNextRunnableJob,
   mapTrendOpportunityToProjectSeed,
@@ -45,6 +48,7 @@ import type {
   KdpTrimSize,
   Product,
   ProductCategory,
+  ProductPromptPack,
   ProductStatus,
   Series,
   StorageAsset,
@@ -102,6 +106,39 @@ function parseAndValidatePhotoDataUrl(
 
   const normalizedMime = mimeType === 'image/jpg' ? 'image/jpeg' : mimeType;
   return { buffer, mimeType: normalizedMime, ext };
+}
+
+function sanitizePromptPack(raw: unknown): ProductPromptPack | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const rawInteriors = Array.isArray(obj.interiorPrompts) ? obj.interiorPrompts : [];
+  const interiorPrompts = rawInteriors
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    .slice(0, 16)
+    .map((item, idx) => ({
+      id: String(item.id ?? `page-${idx + 1}`).trim().slice(0, 48) || `page-${idx + 1}`,
+      title: String(item.title ?? `Page ${idx + 1}`).trim().slice(0, 100),
+      prompt: String(item.prompt ?? '').trim().slice(0, 1500),
+      generatedAssetId:
+        typeof item.generatedAssetId === 'string' && item.generatedAssetId.trim()
+          ? item.generatedAssetId.trim().slice(0, 64)
+          : null,
+    }));
+
+  return {
+    sourceTrendTitle:
+      typeof obj.sourceTrendTitle === 'string' && obj.sourceTrendTitle.trim()
+        ? obj.sourceTrendTitle.trim().slice(0, 160)
+        : undefined,
+    targetAudience: String(obj.targetAudience ?? 'General Audience').trim().slice(0, 120),
+    conceptSummary: String(obj.conceptSummary ?? '').trim().slice(0, 1200),
+    artStylePreset: String(obj.artStylePreset ?? '').trim().slice(0, 260),
+    manuscriptPrompt: String(obj.manuscriptPrompt ?? '').trim().slice(0, 2000),
+    kdpMetadataPrompt: String(obj.kdpMetadataPrompt ?? '').trim().slice(0, 2000),
+    coverPrompt: String(obj.coverPrompt ?? '').trim().slice(0, 2000),
+    interiorPrompts,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function saveReferencePhotoAsset(
@@ -459,6 +496,19 @@ async function startServer() {
     }
 
     const now = new Date().toISOString();
+    const cleanedNotes = String(body.manuscriptNotes ?? '').trim().slice(0, 10000);
+    const providedPack = sanitizePromptPack(body.promptPack);
+    const initialPack =
+      providedPack ??
+      buildPromptPackFromConcept({
+        title: title.trim(),
+        subtitle: String(body.subtitle ?? '').trim().slice(0, 160),
+        category,
+        trimSize,
+        pageCount,
+        concept: cleanedNotes || String(body.subtitle ?? '').trim() || title.trim(),
+      });
+
     const product: Product = {
       id: `prod-${crypto.randomUUID().slice(0, 8)}`,
       seriesId: typeof body.seriesId === 'string' && body.seriesId ? body.seriesId : null,
@@ -479,7 +529,8 @@ async function startServer() {
       referenceAssetId: null,
       driveFolderId: null,
       sheetsRowSyncedAt: null,
-      manuscriptNotes: String(body.manuscriptNotes ?? '').trim().slice(0, 10000),
+      manuscriptNotes: cleanedNotes,
+      promptPack: initialPack,
       createdAt: now,
       updatedAt: now,
     };
@@ -537,6 +588,12 @@ async function startServer() {
     if (body.referenceAssetId !== undefined) {
       product.referenceAssetId =
         typeof body.referenceAssetId === 'string' ? body.referenceAssetId : null;
+    }
+    if (body.category && ['childrens-book', 'coloring-book', 'art-print', 'journal'].includes(body.category)) {
+      product.category = body.category;
+    }
+    if (body.promptPack !== undefined) {
+      product.promptPack = body.promptPack === null ? null : sanitizePromptPack(body.promptPack);
     }
     product.updatedAt = new Date().toISOString();
     workspaceStore.save();
@@ -1030,7 +1087,66 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  app.post('/api/ai/trends/create-project', (req, res) => {
+  app.post('/api/ai/prompt-pack', async (req, res) => {
+    const { productId, concept, targetAudience, artStylePreset, useAi } = req.body as {
+      productId?: string;
+      concept?: string;
+      targetAudience?: string;
+      artStylePreset?: string;
+      useAi?: boolean;
+    };
+
+    const raw = workspaceStore.getRaw();
+    const product = raw.products.find((p) => p.id === productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Select a valid product first.' });
+    }
+
+    const resolvedConcept =
+      (typeof concept === 'string' && concept.trim()) ||
+      product.promptPack?.conceptSummary ||
+      product.manuscriptNotes ||
+      product.subtitle ||
+      product.title;
+
+    const fallbackPack = buildPromptPackFromConcept({
+      title: product.title,
+      subtitle: product.subtitle,
+      category: product.category,
+      trimSize: product.trimSize,
+      pageCount: product.pageCount,
+      concept: resolvedConcept,
+      targetAudience: typeof targetAudience === 'string' ? targetAudience : product.promptPack?.targetAudience,
+      artStylePreset: typeof artStylePreset === 'string' ? artStylePreset : product.promptPack?.artStylePreset,
+    });
+
+    const result =
+      useAi === false
+        ? { promptPack: fallbackPack, usedAi: false, model: 'template' }
+        : await generateProductPromptPackWithAI({
+            title: product.title,
+            category: product.category,
+            trimSize: product.trimSize,
+            pageCount: product.pageCount,
+            concept: resolvedConcept,
+            targetAudience: fallbackPack.targetAudience,
+            artStylePreset: fallbackPack.artStylePreset,
+            fallbackPack,
+          });
+
+    product.promptPack = result.promptPack;
+    product.updatedAt = new Date().toISOString();
+    workspaceStore.save();
+
+    res.json({
+      product,
+      promptPack: result.promptPack,
+      usedAi: result.usedAi,
+      model: result.model,
+    });
+  });
+
+  app.post('/api/ai/trends/create-project', async (req, res) => {
     const { opportunity, deepDive, scanId, opportunityId } = req.body as {
       opportunity?: TrendOpportunity;
       deepDive?: TrendDeepDive;
@@ -1042,9 +1158,33 @@ async function startServer() {
       return res.status(400).json({ error: 'Provide a valid trend opportunity to convert.' });
     }
 
-    const seed = mapTrendOpportunityToProjectSeed(opportunity, deepDive ?? opportunity.deep_dive);
-    const now = new Date().toISOString();
+    const resolvedDeepDive = deepDive ?? opportunity.deep_dive;
+    const seed = mapTrendOpportunityToProjectSeed(opportunity, resolvedDeepDive);
 
+    // Enrich the editable prompt pack with live AI when configured (graceful instant fallback if unavailable)
+    const aiPackResult = await generateProductPromptPackWithAI({
+      title: seed.productDraft.title,
+      category: seed.productDraft.category,
+      trimSize: seed.productDraft.trimSize,
+      pageCount: seed.productDraft.pageCount,
+      concept: seed.promptPack.conceptSummary,
+      targetAudience: seed.promptPack.targetAudience,
+      artStylePreset: seed.promptPack.artStylePreset,
+      fallbackPack: seed.promptPack,
+      marketContext: seed.productDraft.manuscriptNotes,
+    });
+
+    const finalPromptPack = aiPackResult.promptPack;
+    const finalPlanSteps = buildPlanStepsFromPromptPack(
+      {
+        title: seed.productDraft.title,
+        trimSize: seed.productDraft.trimSize,
+        includeBleed: seed.productDraft.includeBleed,
+      },
+      finalPromptPack
+    );
+
+    const now = new Date().toISOString();
     const product: Product = {
       id: `prod-${crypto.randomUUID().slice(0, 8)}`,
       seriesId: null,
@@ -1057,9 +1197,11 @@ async function startServer() {
       includeBleed: seed.productDraft.includeBleed,
       isbn: `979-8-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-0`,
       coverAssetId: null,
+      referenceAssetId: null,
       driveFolderId: null,
       sheetsRowSyncedAt: null,
       manuscriptNotes: seed.productDraft.manuscriptNotes,
+      promptPack: finalPromptPack,
       createdAt: now,
       updatedAt: now,
     };
@@ -1075,7 +1217,7 @@ async function startServer() {
       name: seed.planName,
       templateId: 'trend-blueprint',
       trimSize: product.trimSize,
-      steps: seed.planSteps.map((s, idx) => ({
+      steps: finalPlanSteps.map((s, idx) => ({
         id: `step-${crypto.randomUUID().slice(0, 8)}`,
         order: idx + 1,
         title: s.title,
@@ -1097,7 +1239,12 @@ async function startServer() {
     }
 
     workspaceStore.save();
-    res.status(201).json({ product, folder, plan });
+    res.status(201).json({
+      product,
+      folder,
+      plan,
+      usedAi: aiPackResult.usedAi,
+    });
   });
 
   // --- Module 5: Planning (Batch Generation Plans) ---
@@ -1179,6 +1326,41 @@ async function startServer() {
     workspaceStore.save();
 
     res.status(201).json({ jobs: createdJobs, plan });
+  });
+
+  app.patch('/api/plans/:id', (req, res) => {
+    const raw = workspaceStore.getRaw();
+    const plan = raw.plans.find((p) => p.id === req.params.id);
+    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
+
+    const { name, steps } = req.body as {
+      name?: string;
+      steps?: Array<{
+        id?: string;
+        title: string;
+        stepType: 'manuscript' | 'illustration' | 'export';
+        prompt: string;
+        queued?: boolean;
+      }>;
+    };
+
+    if (typeof name === 'string' && name.trim().length >= 2) {
+      plan.name = name.trim().slice(0, 100);
+    }
+    if (Array.isArray(steps) && steps.length > 0) {
+      plan.steps = steps.map((s, idx) => ({
+        id: typeof s.id === 'string' && s.id.trim() ? s.id : `step-${crypto.randomUUID().slice(0, 8)}`,
+        order: idx + 1,
+        title: String(s.title ?? `Step ${idx + 1}`).trim().slice(0, 100),
+        stepType:
+          s.stepType === 'manuscript' || s.stepType === 'export' ? s.stepType : 'illustration',
+        prompt: String(s.prompt ?? '').trim().slice(0, 1200),
+        queued: Boolean(s.queued),
+      }));
+    }
+    plan.updatedAt = new Date().toISOString();
+    workspaceStore.save();
+    res.json({ plan });
   });
 
   app.delete('/api/plans/:id', (req, res) => {

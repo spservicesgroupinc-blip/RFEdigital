@@ -9,6 +9,7 @@ import type {
   KdpTrimSize,
   Product,
   ProductCategory,
+  ProductPromptPack,
   ProductStatus,
   Series,
   StorageAsset,
@@ -175,9 +176,44 @@ export const workspaceApi = {
       }
     ),
 
+  updatePlan: (
+    planId: string,
+    payload: {
+      name?: string;
+      steps: Array<{
+        id?: string;
+        title: string;
+        stepType: 'manuscript' | 'illustration' | 'export';
+        prompt: string;
+        queued?: boolean;
+      }>;
+    }
+  ) =>
+    requestJson<{ plan: BatchPlan }>(`/api/plans/${encodeURIComponent(planId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
   deletePlan: (planId: string) =>
     requestJson<{ ok: boolean }>(`/api/plans/${encodeURIComponent(planId)}`, {
       method: 'DELETE',
+    }),
+
+  generatePromptPack: (payload: {
+    productId: string;
+    concept?: string;
+    targetAudience?: string;
+    artStylePreset?: string;
+    useAi?: boolean;
+  }) =>
+    requestJson<{
+      product: Product;
+      promptPack: ProductPromptPack;
+      usedAi: boolean;
+      model: string;
+    }>('/api/ai/prompt-pack', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 
   // Jobs

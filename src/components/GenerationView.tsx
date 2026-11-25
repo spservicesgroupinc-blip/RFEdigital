@@ -5,9 +5,11 @@ import type {
   GenerationProvider,
   GenerationRecord,
   Product,
+  PromptPrefillRequest,
   StorageAsset,
   WorkspaceSettings,
 } from '../types/workspace';
+import { STYLE_PRESET_OPTIONS, buildPromptPackFromConcept } from '../lib/workspaceLogic';
 import { AssetPreviewImage } from './AssetPreviewImage';
 
 interface GenerationViewProps {
@@ -17,6 +19,8 @@ interface GenerationViewProps {
   settings: WorkspaceSettings;
   activeProductId: string | null;
   initialMode?: GenerationMode;
+  prefillRequest?: PromptPrefillRequest | null;
+  onClearPrefill?: () => void;
   onSelectProduct: (id: string) => void;
   onQuickCreateProduct: (title: string) => Promise<Product>;
   onGenerateText: (payload: {
@@ -41,33 +45,7 @@ interface GenerationViewProps {
   }) => Promise<void>;
 }
 
-const STYLE_PRESETS = [
-  {
-    label: '3D Animated Storybook Cartoon',
-    value:
-      '3D Animated Storybook Cartoon — expressive charming character, soft warm lighting, Pixar-inspired children’s picture book illustration',
-  },
-  {
-    label: '2D Classic Cartoon Character',
-    value:
-      '2D Classic Cartoon Character — bold clean ink outlines, vibrant playful colors, expressive storybook charm',
-  },
-  {
-    label: 'Hand-Painted Gouache Picture Book',
-    value:
-      'Hand-painted gouache picture book illustration on warm cold-press watercolor paper, editorial storybook warmth',
-  },
-  {
-    label: 'Bold & Easy Coloring Book Line Art',
-    value:
-      'Crisp black-and-white bold ink line art coloring page on pure white background, clean unshaded spaces ready for coloring',
-  },
-  {
-    label: 'Vintage Archival Portrait & Botanical Print',
-    value:
-      'Vintage archival storybook print, delicate ink linework and muted watercolor washes suitable for framed wall art',
-  },
-];
+const STYLE_PRESETS = STYLE_PRESET_OPTIONS;
 
 const OPENROUTER_IMAGE_MODELS = [
   {
@@ -95,6 +73,8 @@ export function GenerationView({
   settings,
   activeProductId,
   initialMode,
+  prefillRequest,
+  onClearPrefill,
   onSelectProduct,
   onQuickCreateProduct,
   onGenerateText,
@@ -112,7 +92,7 @@ export function GenerationView({
   );
   const [openRouterTextModel, setOpenRouterTextModel] = useState('openai/gpt-4o-mini');
   const [openRouterImageModel, setOpenRouterImageModel] = useState(OPENROUTER_IMAGE_MODELS[0].id);
-  const [stylePreset, setStylePreset] = useState(STYLE_PRESETS[0].value);
+  const [stylePreset, setStylePreset] = useState<string>(STYLE_PRESETS[0].value);
   const [assetKind, setAssetKind] = useState<StorageAsset['kind']>('illustration');
   const [saveToManuscript, setSaveToManuscript] = useState(true);
   const [prompt, setPrompt] = useState('');
@@ -134,14 +114,36 @@ export function GenerationView({
   const [useSavedReference, setUseSavedReference] = useState(true);
   const [saveReferenceToProduct, setSaveReferenceToProduct] = useState(true);
 
+  const [loadedSlotLabel, setLoadedSlotLabel] = useState<string | null>(null);
+  const lastPrefillNonceRef = useRef<number>(0);
+
+  // Apply explicit prefill handoff from Product Builder / Trends
   useEffect(() => {
-    if (initialMode) {
+    if (!prefillRequest || prefillRequest.nonce === lastPrefillNonceRef.current) return;
+    lastPrefillNonceRef.current = prefillRequest.nonce;
+    setMode(prefillRequest.mode);
+    setPrompt(prefillRequest.prompt);
+    if (prefillRequest.stylePreset) {
+      setStylePreset(prefillRequest.stylePreset);
+    }
+    if (prefillRequest.assetKind) {
+      setAssetKind(prefillRequest.assetKind);
+    }
+    if (prefillRequest.mode === 'illustration' && settings.openRouterConfigured) {
+      setProvider('openrouter');
+    }
+    setLoadedSlotLabel(prefillRequest.label ?? 'Product prompt');
+    onClearPrefill?.();
+  }, [prefillRequest, settings.openRouterConfigured, onClearPrefill]);
+
+  useEffect(() => {
+    if (initialMode && !prefillRequest) {
       setMode(initialMode);
       if (initialMode === 'illustration' && settings.openRouterConfigured) {
         setProvider('openrouter');
       }
     }
-  }, [initialMode, settings.openRouterConfigured]);
+  }, [initialMode, prefillRequest, settings.openRouterConfigured]);
 
   const savedReferenceAsset = useMemo(() => {
     if (!selectedProduct) return null;
@@ -152,10 +154,42 @@ export function GenerationView({
     return assets.find((a) => a.productId === selectedProduct.id && a.kind === 'reference') ?? null;
   }, [selectedProduct, assets]);
 
-  // Reset per-product reference toggle when switching products
+  const activePromptPack = useMemo(() => {
+    if (!selectedProduct) return null;
+    return (
+      selectedProduct.promptPack ??
+      buildPromptPackFromConcept({
+        title: selectedProduct.title,
+        subtitle: selectedProduct.subtitle,
+        category: selectedProduct.category,
+        trimSize: selectedProduct.trimSize,
+        pageCount: selectedProduct.pageCount,
+        concept: selectedProduct.manuscriptNotes || selectedProduct.subtitle || selectedProduct.title,
+      })
+    );
+  }, [selectedProduct]);
+
+  // Auto-fill editable prompt from selected product's promptPack when switching product or mode
   useEffect(() => {
     setUseSavedReference(true);
-  }, [productId]);
+    if (prefillRequest) return;
+    const pack = activePromptPack;
+    if (!pack) return;
+    if (pack.artStylePreset && STYLE_PRESETS.some((s) => s.value === pack.artStylePreset)) {
+      setStylePreset(pack.artStylePreset);
+    }
+    if (mode === 'illustration' && pack.coverPrompt) {
+      setPrompt(pack.coverPrompt);
+      setAssetKind('cover');
+      setLoadedSlotLabel('Front Cover');
+    } else if (mode === 'manuscript' && pack.manuscriptPrompt) {
+      setPrompt(pack.manuscriptPrompt);
+      setLoadedSlotLabel('Story / Interior Copy');
+    } else if (mode === 'kdp-metadata' && pack.kdpMetadataPrompt) {
+      setPrompt(pack.kdpMetadataPrompt);
+      setLoadedSlotLabel('KDP Listing & Keywords');
+    }
+  }, [productId, mode]);
 
   const showNewProductInput = products.length === 0 || creatingNewProduct;
   const hasActiveReference = Boolean(uploadedPhoto || (savedReferenceAsset && useSavedReference));
@@ -327,9 +361,9 @@ export function GenerationView({
             >
               {(
                 [
-                  ['illustration', 'Image / Cartoon'],
+                  ['illustration', 'Cartoon / Art'],
                   ['manuscript', 'Story Copy'],
-                  ['kdp-metadata', 'KDP Metadata'],
+                  ['kdp-metadata', 'KDP Meta'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -341,7 +375,7 @@ export function GenerationView({
                       setProvider('openrouter');
                     }
                   }}
-                  className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                  className={`truncate rounded px-1.5 py-2 text-[11px] font-medium transition-colors sm:px-2.5 sm:text-xs ${
                     mode === value
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -601,11 +635,86 @@ export function GenerationView({
             </>
           )}
 
+          {/* Quick-Load Auto-Filled Prompts from Product Prompt Pack */}
+          {activePromptPack && !showNewProductInput && (
+            <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-medium text-slate-700">
+                  Auto-filled prompts (click any to load &amp; edit)
+                </span>
+                {loadedSlotLabel && (
+                  <span className="text-[11px] text-blue-700">Loaded: {loadedSlotLabel}</span>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {mode === 'illustration' ? (
+                  <>
+                    {activePromptPack.coverPrompt && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrompt(activePromptPack.coverPrompt);
+                          setAssetKind('cover');
+                          if (activePromptPack.artStylePreset) {
+                            setStylePreset(activePromptPack.artStylePreset);
+                          }
+                          setLoadedSlotLabel('Front Cover');
+                        }}
+                        className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-600 hover:text-blue-800"
+                      >
+                        Front Cover
+                      </button>
+                    )}
+                    {activePromptPack.interiorPrompts.map((item, idx) => (
+                      <button
+                        key={item.id || idx}
+                        type="button"
+                        onClick={() => {
+                          setPrompt(item.prompt);
+                          setAssetKind('illustration');
+                          if (activePromptPack.artStylePreset) {
+                            setStylePreset(activePromptPack.artStylePreset);
+                          }
+                          setLoadedSlotLabel(item.title || `Page ${idx + 1}`);
+                        }}
+                        className="max-w-[180px] truncate rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-600 hover:text-blue-800"
+                      >
+                        {item.title || `Page ${idx + 1}`}
+                      </button>
+                    ))}
+                  </>
+                ) : mode === 'manuscript' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrompt(activePromptPack.manuscriptPrompt);
+                      setLoadedSlotLabel('Story / Interior Copy');
+                    }}
+                    className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-600 hover:text-blue-800"
+                  >
+                    Load Story / Copy Prompt
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrompt(activePromptPack.kdpMetadataPrompt);
+                      setLoadedSlotLabel('KDP Listing & Keywords');
+                    }}
+                    className="rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-600 hover:text-blue-800"
+                  >
+                    Load KDP Listing Prompt
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div>
             <label htmlFor="gen-prompt" className="block text-xs font-medium text-slate-700">
               {mode === 'illustration' && hasActiveReference
-                ? 'Cartoon / Scene Instructions (based on your uploaded photo)'
-                : 'Prompt'}
+                ? 'Cartoon / Scene Instructions (editable before generating)'
+                : 'Prompt (editable before generating)'}
             </label>
             <textarea
               id="gen-prompt"

@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  STYLE_PRESET_OPTIONS,
+  buildPlanStepsFromPromptPack,
+  buildPromptPackFromConcept,
+  buildPromptPackFromTrend,
   calculateKdpDimensionsPt,
+  computeProductReadiness,
   expandPlanToJobs,
   extractJsonObjectFromText,
   filterProducts,
@@ -12,6 +17,7 @@ import {
   mapTrendOpportunityToProjectSeed,
   normalizeKdpTrimSize,
   normalizeTrendOpportunity,
+  pickStylePresetForProduct,
   sanitizeFolderSlug,
   sanitizeSourceUrl,
   transitionJobStatus,
@@ -19,7 +25,14 @@ import {
   validateProductInput,
   validateTokenName,
 } from './workspaceLogic';
-import type { BatchPlan, JobItem, Product } from '../types/workspace';
+import type {
+  BatchPlan,
+  ExportArtifact,
+  GenerationRecord,
+  JobItem,
+  Product,
+  StorageAsset,
+} from '../types/workspace';
 
 test('calculateKdpDimensionsPt computes exact KDP bleed and no-bleed geometry', () => {
   const noBleed = calculateKdpDimensionsPt('8.5x8.5', false);
@@ -306,7 +319,14 @@ test('mapTrendOpportunityToProjectSeed converts a trend card into a pre-filled S
   assert.equal(seed.productDraft.trimSize, '8.5x11');
   assert.equal(seed.productDraft.pageCount, 18);
   assert.ok(seed.productDraft.manuscriptNotes.includes('36 printable calm-corner emotion flashcards'));
-  assert.equal(seed.planSteps.length, 4);
+  assert.equal(seed.promptPack.interiorPrompts.length, 4);
+  assert.ok(seed.promptPack.coverPrompt.includes('Montessori Emotion Flashcards'));
+  assert.ok(seed.promptPack.manuscriptPrompt.includes('Montessori Emotion Flashcards'));
+  assert.ok(seed.promptPack.kdpMetadataPrompt.includes('montessori emotion cards'));
+  assert.equal(seed.planSteps.length, 7);
+  assert.equal(seed.planSteps[0].stepType, 'manuscript');
+  assert.equal(seed.planSteps[1].stepType, 'illustration');
+  assert.equal(seed.planSteps[seed.planSteps.length - 1].stepType, 'export');
   assert.equal(normalizeKdpTrimSize('8 x 10 printable', 'wall-art'), '8x10');
 
   const filtered = filterTrendOpportunities([opp], {
@@ -316,3 +336,185 @@ test('mapTrendOpportunityToProjectSeed converts a trend card into a pre-filled S
   });
   assert.equal(filtered.length, 1);
 });
+
+test('pickStylePresetForProduct selects appropriate style presets by category and hint', () => {
+  assert.equal(pickStylePresetForProduct('coloring-book', ''), STYLE_PRESET_OPTIONS[3].value);
+  assert.equal(pickStylePresetForProduct('art-print', ''), STYLE_PRESET_OPTIONS[4].value);
+  assert.equal(pickStylePresetForProduct('childrens-book', 'soft watercolor wash'), STYLE_PRESET_OPTIONS[2].value);
+  assert.equal(pickStylePresetForProduct('childrens-book', '2d comic hero'), STYLE_PRESET_OPTIONS[1].value);
+  assert.equal(pickStylePresetForProduct('childrens-book', 'magical adventure'), STYLE_PRESET_OPTIONS[0].value);
+});
+
+test('buildPromptPackFromConcept and buildPlanStepsFromPromptPack generate editable packs for concepts', () => {
+  const coloringPack = buildPromptPackFromConcept({
+    title: 'Cozy Bakery Coloring',
+    category: 'coloring-book',
+    trimSize: '8.5x11',
+    pageCount: 30,
+    concept: 'Bold and easy croissants, teacups, and warm bakery storefronts',
+  });
+  assert.equal(coloringPack.artStylePreset, STYLE_PRESET_OPTIONS[3].value);
+  assert.equal(coloringPack.interiorPrompts.length, 4);
+  assert.ok(coloringPack.coverPrompt.includes('Cozy Bakery Coloring'));
+  assert.ok(coloringPack.interiorPrompts[0].prompt.includes('black-and-white'));
+
+  const steps = buildPlanStepsFromPromptPack(
+    { title: 'Cozy Bakery Coloring', trimSize: '8.5x11', includeBleed: false },
+    coloringPack
+  );
+  assert.equal(steps.length, 7);
+  assert.equal(steps[0].title, 'Story / Interior Manuscript Copy');
+  assert.equal(steps[1].title, 'Front Cover Artwork');
+  assert.equal(steps[6].stepType, 'export');
+
+  const trendOpp = normalizeTrendOpportunity(
+    {
+      title: 'Sleepy Woodland Owls Bedtime Book',
+      product_type: 'childrens-book',
+      marketplaces: ['Amazon KDP'],
+      opportunity_score: 91,
+      demand_level: 'High',
+      competition_level: 'Low',
+      price_range_usd: '$9.99 - $14.99',
+      sales_evidence: {
+        observed_signals: ['Top 200 bedtime book category'],
+        estimated_velocity: 'Est. 300 units/mo',
+        confidence: 'High',
+      },
+      seasonality: 'Evergreen',
+      buyer_pain_points: ['Too long for toddlers'],
+      winning_angle: 'Gentle rhythmic 8-spread read-aloud under 5 minutes',
+      starter_blueprint: {
+        target_age_or_audience: 'Ages 2-5',
+        suggested_trim_size: '8.5x8.5',
+        suggested_page_count: 24,
+        art_style_direction: 'Warm gouache woodland palette',
+        hook_concept: 'Little owls tucking in forest friends under a glowing moon',
+        seed_keywords: ['bedtime picture book', 'woodland owl story'],
+      },
+      sources: [{ title: 'Amazon', url: 'https://www.amazon.com/dp/B0000001' }],
+    },
+    [],
+    0
+  )!;
+  const bookPack = buildPromptPackFromTrend(trendOpp);
+  assert.equal(bookPack.sourceTrendTitle, 'Sleepy Woodland Owls Bedtime Book');
+  assert.equal(bookPack.artStylePreset, STYLE_PRESET_OPTIONS[2].value);
+  assert.equal(bookPack.interiorPrompts.length, 4);
+});
+
+test('computeProductReadiness tracks milestones and next recommended workflow step', () => {
+  const baseProduct: Product = {
+    id: 'p-ready',
+    seriesId: null,
+    title: 'Sunny Meadow',
+    subtitle: 'Bedtime Tale',
+    category: 'childrens-book',
+    status: 'draft',
+    trimSize: '8.5x8.5',
+    pageCount: 24,
+    includeBleed: true,
+    isbn: '979-8-0000-0001-1',
+    coverAssetId: null,
+    driveFolderId: null,
+    sheetsRowSyncedAt: null,
+    manuscriptNotes: '',
+    promptPack: null,
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z',
+  };
+
+  // Step 1: concept only, no prompt pack yet
+  const step1 = computeProductReadiness(baseProduct, [], [], []);
+  assert.equal(step1.completedMilestones, 1);
+  assert.equal(step1.recommendedStep, 1);
+
+  // Step 2: prompt pack added, no pages or manuscript yet
+  const withPack: Product = {
+    ...baseProduct,
+    promptPack: buildPromptPackFromConcept({
+      title: baseProduct.title,
+      category: baseProduct.category,
+      trimSize: baseProduct.trimSize,
+      pageCount: baseProduct.pageCount,
+      concept: 'A cheerful bunny exploring a sunny meadow',
+    }),
+  };
+  const step2 = computeProductReadiness(withPack, [], [], []);
+  assert.equal(step2.completedMilestones, 2);
+  assert.equal(step2.recommendedStep, 2);
+
+  // Step 3: artwork generated (reference photo ignored for interior count)
+  const assets: StorageAsset[] = [
+    {
+      id: 'ref-1',
+      folderId: 'folder-1',
+      productId: 'p-ready',
+      name: 'photo.jpg',
+      kind: 'reference',
+      mimeType: 'image/jpeg',
+      sizeBytes: 1000,
+      url: '/uploads/ref.jpg',
+      caption: 'Reference photo',
+      pageOrder: 0,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+    {
+      id: 'cov-1',
+      folderId: 'folder-1',
+      productId: 'p-ready',
+      name: 'cover.png',
+      kind: 'cover',
+      mimeType: 'image/png',
+      sizeBytes: 2048,
+      url: '/uploads/cover.png',
+      caption: 'Front cover',
+      pageOrder: 1,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+  const gens: GenerationRecord[] = [
+    {
+      id: 'g-1',
+      productId: 'p-ready',
+      mode: 'manuscript',
+      provider: 'openrouter',
+      model: 'openai/gpt-4o-mini',
+      prompt: 'Write story',
+      outputText: 'Once upon a time...',
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+  const step3 = computeProductReadiness(withPack, assets, gens, []);
+  assert.equal(step3.completedMilestones, 3);
+  assert.equal(step3.interiorCount, 1);
+  assert.equal(step3.hasCover, true);
+  assert.equal(step3.hasManuscript, true);
+  assert.equal(step3.recommendedStep, 3);
+
+  // Step 4: exported
+  const exportsList: ExportArtifact[] = [
+    {
+      id: 'exp-1',
+      productId: 'p-ready',
+      format: 'pdf',
+      trimSize: '8.5x8.5',
+      includeBleed: true,
+      pageCount: 1,
+      fileName: 'sunny-meadow.pdf',
+      sizeBytes: 50000,
+      downloadUrl: '/exports/sunny-meadow.pdf',
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+  const step4 = computeProductReadiness(withPack, assets, gens, exportsList);
+  assert.equal(step4.completedMilestones, 4);
+  assert.equal(step4.recommendedStep, 4);
+});
+

@@ -173,6 +173,116 @@ export async function generateSeriesPlanSteps(params: {
   return { steps, model: 'gemini-4-hydrogen' };
 }
 
+export async function generateProductPromptPackWithAI(params: {
+  title: string;
+  category: ProductCategory;
+  trimSize: string;
+  pageCount: number;
+  concept: string;
+  targetAudience: string;
+  artStylePreset: string;
+  fallbackPack: import('../src/types/workspace').ProductPromptPack;
+  marketContext?: string;
+}): Promise<{
+  promptPack: import('../src/types/workspace').ProductPromptPack;
+  usedAi: boolean;
+  model: string;
+}> {
+  const systemPrompt = `You are a senior independent publishing art director and KDP/Etsy strategist.
+Generate a complete, ready-to-edit prompt pack for turning a digital product concept into a finished product.
+Return STRICT JSON ONLY (no markdown fences) with this exact schema:
+{
+  "manuscriptPrompt": "Detailed prompt to generate the story copy, front matter, or interior text",
+  "kdpMetadataPrompt": "Detailed prompt to generate marketplace title/subtitle, description, categories, and 7 keywords",
+  "coverPrompt": "Detailed, vivid front-cover illustration prompt with clean space at top for title typography and no garbled text",
+  "interiorPrompts": [
+    { "title": "Short page/spread title", "prompt": "Detailed scene/page illustration prompt matching consistent characters and art style" }
+  ]
+}
+Include exactly 4 distinct, cohesive interiorPrompts tailored specifically to the product title, audience, and format.`;
+
+  const userPrompt = `Product Title: ${params.title}
+Category: ${params.category}
+Trim Size: ${params.trimSize}" · Target Pages: ${params.pageCount}
+Target Audience: ${params.targetAudience}
+Art Style Preset: ${params.artStylePreset}
+Concept / Brief: ${params.concept}
+${params.marketContext ? `Market Research Context:\n${params.marketContext}` : ''}`;
+
+  try {
+    let rawText = '';
+    let modelName = 'deterministic-fallback';
+
+    if (process.env.OPENROUTER_API_KEY?.trim()) {
+      const result = await callOpenRouterText(systemPrompt, userPrompt, 'openai/gpt-4o-mini');
+      rawText = result.text;
+      modelName = result.model;
+    } else if (process.env.GEMINI_API_KEY?.trim()) {
+      const ai = getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+        },
+      });
+      rawText = (response.text ?? '').trim();
+      modelName = 'gemini-4-hydrogen';
+    } else {
+      return { promptPack: params.fallbackPack, usedAi: false, model: 'template' };
+    }
+
+    const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+    const startIdx = cleaned.indexOf('{');
+    const endIdx = cleaned.lastIndexOf('}');
+    if (startIdx === -1 || endIdx <= startIdx) {
+      return { promptPack: params.fallbackPack, usedAi: false, model: 'template' };
+    }
+
+    const parsed = JSON.parse(cleaned.slice(startIdx, endIdx + 1)) as {
+      manuscriptPrompt?: string;
+      kdpMetadataPrompt?: string;
+      coverPrompt?: string;
+      interiorPrompts?: Array<{ title?: string; prompt?: string }>;
+    };
+
+    const interiorList = Array.isArray(parsed.interiorPrompts)
+      ? parsed.interiorPrompts
+          .filter((p) => p && typeof p.prompt === 'string' && p.prompt.trim().length >= 8)
+          .slice(0, 6)
+          .map((p, idx) => ({
+            id: `page-${idx + 1}`,
+            title: String(p.title ?? `Page ${idx + 1}`).trim().slice(0, 90),
+            prompt: p.prompt!.trim().slice(0, 1200),
+          }))
+      : [];
+
+    const merged: import('../src/types/workspace').ProductPromptPack = {
+      ...params.fallbackPack,
+      manuscriptPrompt:
+        typeof parsed.manuscriptPrompt === 'string' && parsed.manuscriptPrompt.trim().length >= 15
+          ? parsed.manuscriptPrompt.trim().slice(0, 1500)
+          : params.fallbackPack.manuscriptPrompt,
+      kdpMetadataPrompt:
+        typeof parsed.kdpMetadataPrompt === 'string' && parsed.kdpMetadataPrompt.trim().length >= 15
+          ? parsed.kdpMetadataPrompt.trim().slice(0, 1500)
+          : params.fallbackPack.kdpMetadataPrompt,
+      coverPrompt:
+        typeof parsed.coverPrompt === 'string' && parsed.coverPrompt.trim().length >= 15
+          ? parsed.coverPrompt.trim().slice(0, 1500)
+          : params.fallbackPack.coverPrompt,
+      interiorPrompts:
+        interiorList.length >= 2 ? interiorList : params.fallbackPack.interiorPrompts,
+      updatedAt: new Date().toISOString(),
+    };
+
+    return { promptPack: merged, usedAi: true, model: modelName };
+  } catch {
+    return { promptPack: params.fallbackPack, usedAi: false, model: 'template' };
+  }
+}
+
 /**
  * Strips potentially unsafe script/event constructs from generated SVG markup.
  */

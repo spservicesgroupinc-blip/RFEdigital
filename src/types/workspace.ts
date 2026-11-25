@@ -1,6 +1,7 @@
 export type ModuleId =
   | 'library'
   | 'trends'
+  | 'builder'
   | 'storage'
   | 'generation'
   | 'planning'
@@ -123,6 +124,25 @@ export interface Series {
   createdAt: string;
 }
 
+export interface InteriorPromptItem {
+  id: string;
+  title: string;
+  prompt: string;
+  generatedAssetId?: string | null;
+}
+
+export interface ProductPromptPack {
+  sourceTrendTitle?: string;
+  targetAudience: string;
+  conceptSummary: string;
+  artStylePreset: string;
+  manuscriptPrompt: string;
+  kdpMetadataPrompt: string;
+  coverPrompt: string;
+  interiorPrompts: InteriorPromptItem[];
+  updatedAt: string;
+}
+
 export interface Product {
   id: string;
   seriesId: string | null;
@@ -139,8 +159,19 @@ export interface Product {
   driveFolderId: string | null;
   sheetsRowSyncedAt: string | null;
   manuscriptNotes: string;
+  promptPack?: ProductPromptPack | null;
   updatedAt: string;
   createdAt: string;
+}
+
+export interface PromptPrefillRequest {
+  productId: string;
+  mode: GenerationMode;
+  prompt: string;
+  stylePreset?: string;
+  assetKind?: AssetKind;
+  label?: string;
+  nonce: number;
 }
 
 export interface StorageFolder {
