@@ -386,12 +386,22 @@ export function StudioView({
     setNotesDirty(false);
 
     setExportTrim(product.trimSize);
-    setExportBleed(product.includeBleed);
-    setPageLayout(
-      product.category === 'coloring-book' || product.category === 'art-print'
-        ? 'none'
-        : 'below-image'
-    );
+
+    // Pre-select sensible export defaults per product category (Task 6).
+    const categoryDefaults: Record<
+      ProductCategory,
+      { bleed: boolean; titlePage: boolean; coverTitle: boolean; layout: PageTextLayout }
+    > = {
+      'childrens-book': { bleed: true, titlePage: true, coverTitle: true, layout: 'below-image' },
+      'coloring-book': { bleed: true, titlePage: false, coverTitle: false, layout: 'none' },
+      'art-print': { bleed: false, titlePage: false, coverTitle: false, layout: 'none' },
+      journal: { bleed: true, titlePage: true, coverTitle: true, layout: 'below-image' },
+    };
+    const defaults = categoryDefaults[product.category] ?? categoryDefaults['childrens-book'];
+    setExportBleed(defaults.bleed);
+    setIncludeTitlePage(defaults.titlePage);
+    setIncludeCoverTitle(defaults.coverTitle);
+    setPageLayout(defaults.layout);
     setLatestArtifact(null);
   }, [product?.id, product?.updatedAt, creatingNew]);
 

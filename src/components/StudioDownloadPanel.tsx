@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import {
   Archive,
   ArrowLeft,
+  ChevronDown,
   CloudUpload,
   Download,
   ExternalLink,
@@ -84,6 +86,7 @@ export function StudioDownloadPanel({
   onUploadArtifactToDrive,
   onBackToGenerate,
 }: StudioDownloadPanelProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   return (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
           <section className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 xl:col-span-7">
@@ -97,7 +100,21 @@ export function StudioDownloadPanel({
             </div>
 
             <div className="mt-5 space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+                Advanced export options
+              </button>
+
+              {showAdvanced && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="builder-export-trim" className="block text-xs font-medium text-slate-700">
                     KDP Trim Specification
@@ -237,6 +254,8 @@ export function StudioDownloadPanel({
                   </div>
                 )}
               </div>
+                </>
+              )}
 
               {latestArtifact && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs">
