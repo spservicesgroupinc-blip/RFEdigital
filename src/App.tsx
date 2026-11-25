@@ -35,6 +35,7 @@ import { TrendsView } from './components/TrendsView';
 import { ProductBuilderView, type BuilderStep } from './components/ProductBuilderView';
 import { ImageGalleryView } from './components/ImageGalleryView';
 import { StorageView } from './components/StorageView';
+import { AssetsView } from './components/AssetsView';
 import { GenerationView } from './components/GenerationView';
 import { PlanningView } from './components/PlanningView';
 import { JobsView } from './components/JobsView';
@@ -890,10 +891,10 @@ export default function App() {
               )}
 
               {activeModule === 'assets' && (
-                <StorageView
+                <AssetsView
                   products={workspace.products}
-                  folders={workspace.folders}
                   assets={workspace.assets}
+                  galleryImages={workspace.galleryImages ?? []}
                   activeProductId={activeProductId}
                   googleConnected={googleConnected}
                   onSelectProduct={setActiveProductId}
@@ -902,12 +903,29 @@ export default function App() {
                     await refreshWorkspace();
                     showNotice(`Uploaded "${asset.name}" to product folder.`);
                   }}
+                  onUploadGalleryImage={async (payload) => {
+                    const { image } = await workspaceApi.uploadGalleryImage(payload);
+                    await refreshWorkspace();
+                    showNotice(
+                      image.driveFileId
+                        ? `Uploaded "${image.label}" to your gallery & backed up to Google Drive.`
+                        : `Saved "${image.label}" to your Image Gallery.`
+                    );
+                    return image;
+                  }}
                   onDeleteAsset={async (id) => {
                     await workspaceApi.deleteAsset(id);
                     await refreshWorkspace();
                     showNotice('Removed asset from storage.');
                   }}
+                  onDeleteGalleryImage={async (id) => {
+                    await workspaceApi.deleteGalleryImage(id);
+                    await refreshWorkspace();
+                    showNotice('Deleted photo from Image Gallery.');
+                  }}
                   onUploadAssetToDrive={(assetId) => handleUploadToDrive({ assetId })}
+                  onUseInBuilder={handleUseGalleryImageInBuilder}
+                  onGeneratePagesFromPhoto={handleGeneratePagesFromGalleryImage}
                 />
               )}
 
