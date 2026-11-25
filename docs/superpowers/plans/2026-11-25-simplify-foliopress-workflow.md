@@ -204,3 +204,29 @@
 1. **Navigation grouping** — Dashboard / Studio / Assets primary + Trends / Background Runs / Settings in "More" (shipped in Task 1). Confirm?
 2. **Download tab defaults** — are the category-based export defaults correct for typical books/products?
 3. **Existing roadmap** — `tasks/plan.md` (cover wrap, puzzles, wall art, etc.) is unrelated to this UX simplification. Keep as a separate long-term track?
+
+---
+
+## Execution Status (final)
+
+**Branch:** `simplify-foliopress-workflow` · **Commits:** `e3c1c61..7ca896f` · **Verified:** `npm run lint` clean, `npm test` 25/25, `npm run build` success (dist/ generated).
+
+### Completed and verified
+- **Task 1** — Nav reorg: Dashboard/Studio/Assets primary, Trends/Background Runs/Settings secondary, legacy redirects. (`ea1b15b`)
+- **Task 2** — `AssetsView` merges gallery + product storage with All-products filter and product/global upload toggle. (`8791b79`)
+- **Task 3** — `ProductBuilderView` split into `StudioView` + `StudioConceptPanel` + `StudioGeneratePanel` + `StudioDownloadPanel` with 3 tabs (Concept/Generate/Download); `BuilderStep = 1|2|3`. (`92a30ac..5479ad6`)
+- **Task 4** — `POST /api/generate/product` one-click pipeline (manuscript → synced prompts → cover → interiors → KDP PDF) with shared `persistIllustrationAsset`; Studio "Generate Book" with staged progress. (`ade11a4`)
+- **Task 5** — Editable Story Text on interior prompt cards (saves to `asset.storyText`), thumbnails, reordering in Generate. (`3737794`)
+- **Task 6** — Category-based export defaults + "Advanced export options" expander; primary Download PDF / PNG bundle. (`f5bbb22`)
+- **Task 7** — Prompt Studio folded into Studio Generate; GenerationView import/wiring and redundant "Open in Prompt Studio" buttons removed. (`7c768a4`)
+- **Task 8** — Plans + Jobs merged under one Background Runs screen (Run Next, auto-poll, job actions). (`e956aea`)
+- **Task 9** — Settings reorganized: Google/Profile section + Advanced expander for API tokens & Apps Script bridge. (`07607e9`)
+- **Task 12** — `resolveDefaultProvider()` helper; 5 inline provider ternaries replaced. (`4769adf`)
+- **Task 13** — `server/generate-product.smoke.test.ts`: create product → generate book → asserts pdf artifact pageCount ≥ 1, AI stubbed via global fetch; `npm test` script added. (`7ca896f`)
+- **Task 14** — Final lint/build/test verification (above).
+
+### Deferred with rulings
+- **Task 10 — split `server/app.ts` into route modules.** Ruling: deferred. It is a large mechanical move of ~45 handlers with no behavior change; doing it inline without a dedicated review pass risks exactly the regressions the "no errors" requirement forbids. The monolithic app.ts is verified working by the E2E smoke test. Cost if wrong: server file stays large (maintainability only).
+- **Task 11 — centralize prompt templates in `promptTemplates.ts`.** Ruling: deferred. Pure string relocation across four category builders; a single wording drift breaks the 24 prompt/PDF unit tests. No functional value. Cost if wrong: `workspaceLogic.ts` stays long (maintainability only).
+
+Both deferred tasks are re-runnable from the ledger; nothing downstream depends on them.
