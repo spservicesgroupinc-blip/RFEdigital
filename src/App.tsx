@@ -2,15 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import {
   BookOpen,
-  CalendarRange,
   Cpu,
-  FileDown,
   FolderKanban,
-  Images,
   KeyRound,
   Layers,
+  LayoutDashboard,
   Menu,
   Plus,
+  Settings,
   Sparkles,
   TrendingUp,
   X,
@@ -46,38 +45,45 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 
 const NAV_ITEMS: Array<{
   id: ModuleId;
-  group: 'create' | 'tools';
+  group: 'primary' | 'secondary';
   label: string;
   caption: string;
   icon: typeof BookOpen;
 }> = [
-  { id: 'library', group: 'create', label: 'My Products', caption: 'Catalog & Books', icon: BookOpen },
-  { id: 'trends', group: 'create', label: 'Market Trends', caption: 'Find Niches', icon: TrendingUp },
-  { id: 'builder', group: 'create', label: 'Product Builder', caption: '4-Step Flow', icon: Layers },
-  { id: 'gallery', group: 'create', label: 'Image Gallery', caption: 'Saved Photos', icon: Images },
-  { id: 'generation', group: 'tools', label: 'Prompt Studio', caption: 'Photo & AI Art', icon: Sparkles },
-  { id: 'planning', group: 'tools', label: 'Batch Plans', caption: 'Multi-Step Plans', icon: CalendarRange },
-  { id: 'jobs', group: 'tools', label: 'Job Queue', caption: 'Background Runs', icon: Cpu },
-  { id: 'storage', group: 'tools', label: 'Files & Storage', caption: 'Product Folders', icon: FolderKanban },
-  { id: 'export', group: 'tools', label: 'Export PDF', caption: 'KDP PDF & ZIP', icon: FileDown },
-  { id: 'identity', group: 'tools', label: 'Settings & Sync', caption: 'Google & Keys', icon: KeyRound },
+  // Primary workflow: Dashboard → Studio → Assets
+  { id: 'dashboard', group: 'primary', label: 'Dashboard', caption: 'Products & Books', icon: LayoutDashboard },
+  { id: 'studio', group: 'primary', label: 'Studio', caption: 'Create & Generate', icon: Layers },
+  { id: 'assets', group: 'primary', label: 'Assets', caption: 'Images & Files', icon: FolderKanban },
+  // Secondary tools
+  { id: 'trends', group: 'secondary', label: 'Market Trends', caption: 'Find Niches', icon: TrendingUp },
+  { id: 'background-runs', group: 'secondary', label: 'Background Runs', caption: 'Plans & Jobs', icon: Cpu },
+  { id: 'settings', group: 'secondary', label: 'Settings', caption: 'Google & Keys', icon: Settings },
 ];
 
+/** Map old and current URL path segments to the active module id.
+ *  Legacy routes redirect to their modern counterpart. */
 function getInitialModuleFromPath(): ModuleId {
   const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  const validIds: ModuleId[] = [
-    'library',
-    'trends',
-    'builder',
-    'gallery',
-    'storage',
-    'generation',
-    'planning',
-    'jobs',
-    'export',
-    'identity',
-  ];
-  return validIds.includes(seg as ModuleId) ? (seg as ModuleId) : 'library';
+  const redirects: Record<string, ModuleId> = {
+    // modern routes
+    dashboard: 'dashboard',
+    studio: 'studio',
+    assets: 'assets',
+    trends: 'trends',
+    'background-runs': 'background-runs',
+    settings: 'settings',
+    // legacy routes
+    library: 'dashboard',
+    builder: 'studio',
+    gallery: 'assets',
+    storage: 'assets',
+    generation: 'studio',
+    planning: 'background-runs',
+    jobs: 'background-runs',
+    export: 'studio',
+    identity: 'settings',
+  };
+  return redirects[seg] ?? 'dashboard';
 }
 
 export default function App() {
@@ -136,9 +142,9 @@ export default function App() {
     refreshWorkspace();
   }, [refreshWorkspace]);
 
-  // Keep clean SPA URL paths (/trends, /planning, /, etc.) in sync with module navigation
+  // Keep clean SPA URL paths (/trends, /settings, /, etc.) in sync with module navigation
   useEffect(() => {
-    const targetPath = activeModule === 'library' ? '/' : `/${activeModule}`;
+    const targetPath = activeModule === 'dashboard' ? '/' : `/${activeModule}`;
     if (window.location.pathname !== targetPath) {
       window.history.replaceState({}, '', targetPath);
     }
@@ -267,34 +273,50 @@ export default function App() {
   const activeNav = NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0];
   const queuedJobsCount = workspace?.jobs.filter((j) => j.status === 'queued').length ?? 0;
 
+  /** Map legacy module ids to their modern counterparts so internal navigation stays consistent. */
+  const normalizeModule = (module: ModuleId): ModuleId => {
+    const map: Record<string, ModuleId> = {
+      library: 'dashboard',
+      builder: 'studio',
+      gallery: 'assets',
+      storage: 'assets',
+      generation: 'studio',
+      planning: 'background-runs',
+      jobs: 'background-runs',
+      export: 'studio',
+      identity: 'settings',
+    };
+    return map[module] ?? module;
+  };
+
   const openModuleForProduct = (module: ModuleId, productId: string) => {
     setActiveProductId(productId);
-    setActiveModule(module);
+    setActiveModule(normalizeModule(module));
   };
 
   const openBuilderForProduct = (productId: string, step?: BuilderStep) => {
     setActiveProductId(productId);
     setBuilderStep(step ?? 2);
-    setActiveModule('builder');
+    setActiveModule('studio');
   };
 
   const openIllustrationForProduct = (productId: string) => {
     setActiveProductId(productId);
     setGenerationInitialMode('illustration');
-    setActiveModule('generation');
+    setActiveModule('studio');
   };
 
   const openPromptStudioWithPrefill = (req: Omit<PromptPrefillRequest, 'nonce'>) => {
     setActiveProductId(req.productId);
     setGenerationInitialMode(req.mode);
     setPromptPrefill({ ...req, nonce: Date.now() });
-    setActiveModule('generation');
+    setActiveModule('studio');
   };
 
   const handleUseGalleryImageInBuilder = (img: GalleryImage) => {
     setBuilderGalleryImageId(img.id);
     setBuilderStep(2);
-    setActiveModule('builder');
+    setActiveModule('studio');
     showNotice(`Attached "${img.label}" from your Image Gallery — click Generate All Pages From Photo.`);
   };
 
@@ -310,7 +332,7 @@ export default function App() {
       label: `Multi-page from ${img.label}`,
       nonce: Date.now(),
     });
-    setActiveModule('generation');
+    setActiveModule('studio');
   };
 
   const handleQuickCreateProduct = async (opts: {
@@ -337,7 +359,7 @@ export default function App() {
   };
 
   const renderPrimaryHeaderAction = () => {
-    if (activeModule === 'library') {
+    if (activeModule === 'dashboard') {
       return (
         <button
           type="button"
@@ -350,7 +372,7 @@ export default function App() {
         </button>
       );
     }
-    if (activeModule === 'jobs') {
+    if (activeModule === 'background-runs') {
       return (
         <button
           type="button"
@@ -366,7 +388,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => {
-          setActiveModule('library');
+          setActiveModule('dashboard');
           setShowNewProductModal(true);
         }}
         className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 sm:px-3.5 whitespace-nowrap shrink-0"
@@ -383,15 +405,14 @@ export default function App() {
     label: string;
     icon: typeof BookOpen;
   }> = [
-    { id: 'library', label: 'Products', icon: BookOpen },
-    { id: 'trends', label: 'Trends', icon: TrendingUp },
-    { id: 'builder', label: 'Build', icon: Layers },
-    { id: 'generation', label: 'Studio', icon: Sparkles },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'studio', label: 'Studio', icon: Layers },
+    { id: 'assets', label: 'Assets', icon: FolderKanban },
   ];
 
   const isSecondaryModuleActive = !MOBILE_PRIMARY_TABS.some((t) => t.id === activeModule);
-  const createNavItems = NAV_ITEMS.filter((i) => i.group === 'create');
-  const toolNavItems = NAV_ITEMS.filter((i) => i.group === 'tools');
+  const primaryNavItems = NAV_ITEMS.filter((i) => i.group === 'primary');
+  const secondaryNavItems = NAV_ITEMS.filter((i) => i.group === 'secondary');
 
   return (
     <div className="flex min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip bg-[#F8FAFC] text-slate-900">
@@ -399,10 +420,10 @@ export default function App() {
       <aside className="hidden w-[252px] shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex h-16 items-center border-b border-slate-200 px-6">
           <a
-            href="#library"
+            href="#dashboard"
             onClick={(e) => {
               e.preventDefault();
-              setActiveModule('library');
+              setActiveModule('dashboard');
             }}
             className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
           >
@@ -411,11 +432,8 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3" aria-label="Workspace modules">
-          <div className="px-3 pb-1.5 pt-1 text-[11px] font-semibold tracking-wide text-slate-400">
-            Create
-          </div>
           <div className="space-y-1">
-            {createNavItems.map((item) => {
+            {primaryNavItems.map((item) => {
               const Icon = item.icon;
               const active = activeModule === item.id;
               return (
@@ -443,10 +461,10 @@ export default function App() {
           </div>
 
           <div className="mt-5 border-t border-slate-100 px-3 pb-1.5 pt-4 text-[11px] font-semibold tracking-wide text-slate-400">
-            Tools
+            More
           </div>
           <div className="space-y-1">
-            {toolNavItems.map((item) => {
+            {secondaryNavItems.map((item) => {
               const Icon = item.icon;
               const active = activeModule === item.id;
               return (
@@ -524,12 +542,8 @@ export default function App() {
               </button>
             </div>
             <nav className="flex-1 space-y-4 overflow-y-auto p-3">
-              <div>
-                <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400">
-                  Create
-                </div>
-                <div className="space-y-1">
-                  {createNavItems.map((item) => {
+              <div className="space-y-1">
+                {primaryNavItems.map((item) => {
                     const Icon = item.icon;
                     const active = activeModule === item.id;
                     return (
@@ -554,14 +568,13 @@ export default function App() {
                     );
                   })}
                 </div>
-              </div>
 
               <div className="border-t border-slate-100 pt-3">
                 <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400">
-                  Tools
+                  More
                 </div>
                 <div className="space-y-1">
-                  {toolNavItems.map((item) => {
+                  {secondaryNavItems.map((item) => {
                     const Icon = item.icon;
                     const active = activeModule === item.id;
                     return (
@@ -603,7 +616,7 @@ export default function App() {
                 <div className="mt-0.5 truncate">
                   {googleConnected
                     ? `Google connected (${googleUser?.email ?? 'Active'})`
-                    : 'Local studio · Connect Drive in Identity'}
+                    : 'Local studio · Connect Drive in Settings'}
                 </div>
               </div>
             </div>
@@ -684,7 +697,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              {activeModule === 'library' && (
+              {activeModule === 'dashboard' && (
                 <LibraryView
                   products={workspace.products}
                   series={workspace.series}
@@ -770,7 +783,7 @@ export default function App() {
                     await refreshWorkspace();
                     setActiveProductId(product.id);
                     setBuilderStep(2);
-                    setActiveModule('builder');
+                    setActiveModule('studio');
                     showNotice(
                       `Generated editable prompts for "${product.title}" — review or tweak any prompt before generating.`
                     );
@@ -778,12 +791,12 @@ export default function App() {
                   onOpenExistingProject={(productId) => {
                     setActiveProductId(productId);
                     setBuilderStep(2);
-                    setActiveModule('builder');
+                    setActiveModule('studio');
                   }}
                 />
               )}
 
-              {activeModule === 'builder' && (
+              {activeModule === 'studio' && (
                 <ProductBuilderView
                   products={workspace.products}
                   assets={workspace.assets}
@@ -871,50 +884,12 @@ export default function App() {
                     handleUploadToDrive({ artifactId })
                   }
                   onOpenInPromptStudio={openPromptStudioWithPrefill}
-                  onOpenGallery={() => setActiveModule('gallery')}
+                  onOpenGallery={() => setActiveModule('assets')}
                   onGoToTrends={() => setActiveModule('trends')}
                 />
               )}
 
-              {activeModule === 'gallery' && (
-                <ImageGalleryView
-                  galleryImages={workspace.galleryImages ?? []}
-                  products={workspace.products}
-                  activeProductId={activeProductId}
-                  settings={workspace.settings}
-                  onUploadGalleryImage={async (payload) => {
-                    const { image } = await workspaceApi.uploadGalleryImage(payload);
-                    await refreshWorkspace();
-                    showNotice(
-                      image.driveFileId
-                        ? `Uploaded "${image.label}" to your gallery & backed up to Google Drive.`
-                        : `Saved "${image.label}" to your Image Gallery.`
-                    );
-                    return image;
-                  }}
-                  onUpdateGalleryImage={async (id, payload) => {
-                    await workspaceApi.updateGalleryImage(id, payload);
-                    await refreshWorkspace();
-                    showNotice('Updated gallery photo details.');
-                  }}
-                  onDeleteGalleryImage={async (id) => {
-                    await workspaceApi.deleteGalleryImage(id);
-                    await refreshWorkspace();
-                    showNotice('Deleted photo from Image Gallery.');
-                  }}
-                  onSyncGallery={async () => {
-                    const res = await workspaceApi.syncGalleryWithAppsScript();
-                    await refreshWorkspace();
-                    showNotice(
-                      `Gallery synced with Apps Script (${res.uploaded} uploaded, ${res.pulled} pulled, ${res.total} total).`
-                    );
-                  }}
-                  onUseInBuilder={handleUseGalleryImageInBuilder}
-                  onGeneratePagesFromPhoto={handleGeneratePagesFromGalleryImage}
-                />
-              )}
-
-              {activeModule === 'storage' && (
+              {activeModule === 'assets' && (
                 <StorageView
                   products={workspace.products}
                   folders={workspace.folders}
@@ -936,34 +911,7 @@ export default function App() {
                 />
               )}
 
-              {activeModule === 'generation' && (
-                <GenerationView
-                  products={workspace.products}
-                  assets={workspace.assets}
-                  galleryImages={workspace.galleryImages ?? []}
-                  generations={workspace.generations}
-                  settings={workspace.settings}
-                  activeProductId={activeProductId}
-                  initialMode={generationInitialMode}
-                  prefillRequest={promptPrefill}
-                  onClearPrefill={() => setPromptPrefill(null)}
-                  onSelectProduct={setActiveProductId}
-                  onQuickCreateProduct={(title) => handleQuickCreateProduct({ title })}
-                  onOpenGallery={() => setActiveModule('gallery')}
-                  onGenerateText={async (payload) => {
-                    await workspaceApi.generateText(payload);
-                    await refreshWorkspace();
-                    showNotice('Generated copy saved to product history.');
-                  }}
-                  onGenerateIllustration={async (payload) => {
-                    const { asset } = await workspaceApi.generateIllustration(payload);
-                    await refreshWorkspace();
-                    showNotice(`Illustration "${asset.name}" saved to product storage folder.`);
-                  }}
-                />
-              )}
-
-              {activeModule === 'planning' && (
+              {activeModule === 'background-runs' && (
                 <PlanningView
                   products={workspace.products}
                   plans={workspace.plans}
@@ -992,7 +940,7 @@ export default function App() {
                     );
                     await refreshWorkspace();
                     showNotice(`Queued ${jobs.length} background jobs.`);
-                    setActiveModule('jobs');
+                    setActiveModule('background-runs');
                   }}
                   onDeletePlan={async (planId) => {
                     await workspaceApi.deletePlan(planId);
@@ -1002,54 +950,7 @@ export default function App() {
                 />
               )}
 
-              {activeModule === 'jobs' && (
-                <JobsView
-                  jobs={workspace.jobs}
-                  products={workspace.products}
-                  settings={workspace.settings}
-                  autoPoll={autoPoll}
-                  runningStep={runningStep}
-                  onToggleAutoPoll={() => setAutoPoll((prev) => !prev)}
-                  onRunNextJob={handleRunNextJob}
-                  onRefreshJobs={async () => {
-                    await refreshWorkspace();
-                    showNotice('Polled latest job queue status.');
-                  }}
-                  onJobAction={async (jobId, action) => {
-                    await workspaceApi.jobAction(jobId, action);
-                    await refreshWorkspace();
-                    showNotice(`Updated job status (${action}).`);
-                  }}
-                />
-              )}
-
-              {activeModule === 'export' && (
-                <ExportView
-                  products={workspace.products}
-                  assets={workspace.assets}
-                  exportsList={workspace.exports}
-                  activeProductId={activeProductId}
-                  googleConnected={googleConnected}
-                  onSelectProduct={setActiveProductId}
-                  onExportPdf={async (payload) => {
-                    const { artifact } = await workspaceApi.exportPdf(payload);
-                    await refreshWorkspace();
-                    showNotice(`Built print-ready KDP PDF (${artifact.pageCount} pages).`);
-                    return artifact;
-                  }}
-                  onExportBundle={async (payload) => {
-                    const { artifact } = await workspaceApi.exportBundle(payload);
-                    await refreshWorkspace();
-                    showNotice(`Packaged downloadable bundle "${artifact.fileName}".`);
-                    return artifact;
-                  }}
-                  onUploadArtifactToDrive={(artifactId) =>
-                    handleUploadToDrive({ artifactId })
-                  }
-                />
-              )}
-
-              {activeModule === 'identity' && (
+              {activeModule === 'settings' && (
                 <IdentityView
                   googleUser={googleUser}
                   googleConnected={googleConnected}

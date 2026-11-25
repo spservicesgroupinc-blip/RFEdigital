@@ -1,6 +1,14 @@
 export type ModuleId =
-  | 'library'
+  // Primary workflow
+  | 'dashboard'
+  | 'studio'
+  | 'assets'
+  // Secondary tools
   | 'trends'
+  | 'background-runs'
+  | 'settings'
+  // Legacy module ids (kept for backward-compatible URL parsing / redirects)
+  | 'library'
   | 'builder'
   | 'gallery'
   | 'storage'
