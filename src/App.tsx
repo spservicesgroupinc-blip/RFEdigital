@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  BuilderStep,
   GalleryImage,
   GenerationMode,
   KdpTrimSize,
@@ -32,7 +33,7 @@ import {
 } from './lib/googleAuth';
 import { LibraryView } from './components/LibraryView';
 import { TrendsView } from './components/TrendsView';
-import { ProductBuilderView, type BuilderStep } from './components/ProductBuilderView';
+import { StudioView } from './components/StudioView';
 import { ImageGalleryView } from './components/ImageGalleryView';
 import { StorageView } from './components/StorageView';
 import { AssetsView } from './components/AssetsView';
@@ -798,7 +799,7 @@ export default function App() {
               )}
 
               {activeModule === 'studio' && (
-                <ProductBuilderView
+                <StudioView
                   products={workspace.products}
                   assets={workspace.assets}
                   galleryImages={workspace.galleryImages ?? []}
