@@ -941,7 +941,7 @@ export function LibraryView({
                         onClick={() => onOpenIllustrationForProduct(selectedProduct.id)}
                         className="rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
                       >
-                        Prompt Studio
+                        Studio
                       </button>
                       <button
                         type="button"

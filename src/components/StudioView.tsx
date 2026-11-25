@@ -12,7 +12,6 @@ import type {
   Product,
   ProductCategory,
   ProductPromptPack,
-  PromptPrefillRequest,
   StorageAsset,
   WorkspaceSettings,
 } from '../types/workspace';
@@ -134,7 +133,6 @@ interface StudioViewProps {
     provider?: GenerationProvider;
   }) => Promise<ExportArtifact>;
   onUploadArtifactToDrive: (artifactId: string) => Promise<void>;
-  onOpenInPromptStudio: (req: Omit<PromptPrefillRequest, 'nonce'>) => void;
   onOpenGallery: () => void;
   onGoToTrends: () => void;
 }
@@ -170,7 +168,6 @@ export function StudioView({
   onExportBundle,
   onGenerateProduct,
   onUploadArtifactToDrive,
-  onOpenInPromptStudio,
   onOpenGallery,
   onGoToTrends,
 }: StudioViewProps) {
@@ -1438,7 +1435,6 @@ export function StudioView({
           handleSavePageDesign={handleSavePageDesign}
           handleMovePage={handleMovePage}
           onDeleteAsset={onDeleteAsset}
-          onOpenInPromptStudio={onOpenInPromptStudio}
           onOpenGallery={onOpenGallery}
           onBackToConcept={() => setStep(1)}
           onContinueToDownload={() => setStep(3)}

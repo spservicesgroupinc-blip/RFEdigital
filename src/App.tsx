@@ -17,11 +17,9 @@ import {
 import type {
   BuilderStep,
   GalleryImage,
-  GenerationMode,
   KdpTrimSize,
   ModuleId,
   ProductCategory,
-  PromptPrefillRequest,
   WorkspaceSnapshot,
 } from './types/workspace';
 import { workspaceApi } from './lib/api';
@@ -37,7 +35,6 @@ import { StudioView } from './components/StudioView';
 import { ImageGalleryView } from './components/ImageGalleryView';
 import { StorageView } from './components/StorageView';
 import { AssetsView } from './components/AssetsView';
-import { GenerationView } from './components/GenerationView';
 import { PlanningView } from './components/PlanningView';
 import { JobsView } from './components/JobsView';
 import { ExportView } from './components/ExportView';
@@ -93,13 +90,11 @@ export default function App() {
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [builderStep, setBuilderStep] = useState<BuilderStep | undefined>(undefined);
   const [builderGalleryImageId, setBuilderGalleryImageId] = useState<string | null>(null);
-  const [promptPrefill, setPromptPrefill] = useState<PromptPrefillRequest | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showNewProductModal, setShowNewProductModal] = useState(false);
-  const [generationInitialMode, setGenerationInitialMode] = useState<GenerationMode>('illustration');
 
   // Google Workspace auth state (token strictly in-memory via googleAuth.ts)
   const [googleUser, setGoogleUser] = useState<User | null>(null);
@@ -304,14 +299,6 @@ export default function App() {
 
   const openIllustrationForProduct = (productId: string) => {
     setActiveProductId(productId);
-    setGenerationInitialMode('illustration');
-    setActiveModule('studio');
-  };
-
-  const openPromptStudioWithPrefill = (req: Omit<PromptPrefillRequest, 'nonce'>) => {
-    setActiveProductId(req.productId);
-    setGenerationInitialMode(req.mode);
-    setPromptPrefill({ ...req, nonce: Date.now() });
     setActiveModule('studio');
   };
 
@@ -323,18 +310,10 @@ export default function App() {
   };
 
   const handleGeneratePagesFromGalleryImage = (img: GalleryImage) => {
-    const targetId = activeProductId || workspace?.products[0]?.id || '';
-    setGenerationInitialMode('illustration');
-    setPromptPrefill({
-      productId: targetId,
-      mode: 'illustration',
-      prompt: `Children's picture book illustration starring the character from "${img.label}" in a vibrant new scene and playful pose.`,
-      assetKind: 'illustration',
-      galleryImageId: img.id,
-      label: `Multi-page from ${img.label}`,
-      nonce: Date.now(),
-    });
+    setBuilderGalleryImageId(img.id);
+    setBuilderStep(2);
     setActiveModule('studio');
+    showNotice(`Attached "${img.label}" — generate story-matched pages from the Generate tab.`);
   };
 
   const handleQuickCreateProduct = async (opts: {
@@ -891,7 +870,6 @@ export default function App() {
                   onUploadArtifactToDrive={(artifactId) =>
                     handleUploadToDrive({ artifactId })
                   }
-                  onOpenInPromptStudio={openPromptStudioWithPrefill}
                   onOpenGallery={() => setActiveModule('assets')}
                   onGoToTrends={() => setActiveModule('trends')}
                 />

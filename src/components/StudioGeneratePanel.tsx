@@ -25,7 +25,6 @@ import type {
   PageTextLayout,
   Product,
   ProductPromptPack,
-  PromptPrefillRequest,
   StorageAsset,
   WorkspaceSettings,
 } from '../types/workspace';
@@ -102,7 +101,6 @@ interface StudioGeneratePanelProps {
   handleSavePageDesign: (asset: StorageAsset) => Promise<void>;
   handleMovePage: (index: number, direction: -1 | 1) => Promise<void>;
   onDeleteAsset: (assetId: string) => Promise<void>;
-  onOpenInPromptStudio: (req: Omit<PromptPrefillRequest, 'nonce'>) => void;
   onOpenGallery: () => void;
   onBackToConcept: () => void;
   onContinueToDownload: () => void;
@@ -172,7 +170,6 @@ export function StudioGeneratePanel({
   handleSavePageDesign,
   handleMovePage,
   onDeleteAsset,
-  onOpenInPromptStudio,
   onOpenGallery,
   onBackToConcept,
   onContinueToDownload,
@@ -419,22 +416,6 @@ export function StudioGeneratePanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      onOpenInPromptStudio({
-                        productId: product.id,
-                        mode: 'illustration',
-                        prompt: editablePack.coverPrompt,
-                        stylePreset: artStylePreset,
-                        assetKind: 'cover',
-                        label: 'Front Cover Artwork',
-                      })
-                    }
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-                  >
-                    Open in Prompt Studio
-                  </button>
-                  <button
-                    type="button"
                     disabled={Boolean(runningKey) || !editablePack.coverPrompt.trim()}
                     onClick={handleGenerateCover}
                     className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-800 disabled:opacity-55 whitespace-nowrap"
@@ -488,20 +469,6 @@ export function StudioGeneratePanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      onOpenInPromptStudio({
-                        productId: product.id,
-                        mode: 'manuscript',
-                        prompt: editablePack.manuscriptPrompt,
-                        label: 'Story / Interior Copy',
-                      })
-                    }
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-                  >
-                    Open in Prompt Studio
-                  </button>
-                  <button
-                    type="button"
                     disabled={Boolean(runningKey) || !editablePack.manuscriptPrompt.trim()}
                     onClick={handleGenerateStory}
                     className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-55 whitespace-nowrap"
@@ -551,20 +518,6 @@ export function StudioGeneratePanel({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onOpenInPromptStudio({
-                        productId: product.id,
-                        mode: 'kdp-metadata',
-                        prompt: editablePack.kdpMetadataPrompt,
-                        label: 'KDP Listing & Keywords',
-                      })
-                    }
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-                  >
-                    Open in Prompt Studio
-                  </button>
                   <button
                     type="button"
                     disabled={Boolean(runningKey) || !editablePack.kdpMetadataPrompt.trim()}
@@ -681,22 +634,6 @@ export function StudioGeneratePanel({
                           }
                           className="min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:border-blue-700 focus:outline-none"
                         />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onOpenInPromptStudio({
-                              productId: product.id,
-                              mode: 'illustration',
-                              prompt: page.prompt,
-                              stylePreset: artStylePreset,
-                              assetKind: 'illustration',
-                              label: page.title,
-                            })
-                          }
-                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 whitespace-nowrap"
-                        >
-                          Studio
-                        </button>
                         <button
                           type="button"
                           disabled={Boolean(runningKey) || !page.prompt.trim()}
