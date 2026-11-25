@@ -2072,15 +2072,60 @@ export function createApiApp(): express.Express {
     }
   });
 
-  app.get('/api/export/download/:filename', (req, res) => {
+  app.get('/api/export/download/:filename', async (req, res) => {
     try {
       const safePath = resolveSafeChildPath(EXPORTS_DIR, req.params.filename);
-      if (!fs.existsSync(safePath)) return res.status(404).json({ error: 'Export file not found.' });
-      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(safePath)}"`);
+      const baseName = path.basename(safePath);
+      const isPdf = baseName.toLowerCase().endsWith('.pdf');
+      const isZip = baseName.toLowerCase().endsWith('.zip');
+      let fileBytes: Buffer | null = fs.existsSync(safePath) ? fs.readFileSync(safePath) : null;
+
+      // Serverless cold-start recovery: rebuild on demand if /tmp file is missing
+      if (!fileBytes) {
+        const raw = workspaceStore.getRaw();
+        const artifact = raw.exports.find((e) => e.fileName === baseName);
+        if (artifact) {
+          const product = raw.products.find((p) => p.id === artifact.productId);
+          if (product) {
+            const orderedAssets = raw.assets
+              .filter((a) => a.productId === product.id && a.kind !== 'reference')
+              .sort((a, b) => a.pageOrder - b.pageOrder);
+            if (isPdf) {
+              const { pdfBytes } = await buildKdpPdfBuffer({
+                product,
+                assets: orderedAssets,
+                trimSize: artifact.trimSize,
+                includeBleed: artifact.includeBleed,
+                includeTitlePage: true,
+                includeCaptions: product.category !== 'coloring-book' && product.category !== 'art-print',
+                includeCoverTitle: true,
+                authorImprint: raw.settings.authorImprint,
+              });
+              fileBytes = Buffer.from(pdfBytes);
+              fs.writeFileSync(safePath, fileBytes);
+            } else if (isZip) {
+              fileBytes = await buildAssetBundleZip(product, orderedAssets);
+              fs.writeFileSync(safePath, fileBytes);
+            }
+          }
+        }
+      }
+
+      if (!fileBytes || fileBytes.length === 0) {
+        return res.status(404).json({ error: 'Export file not found.' });
+      }
+
+      res.setHeader(
+        'Content-Type',
+        isPdf ? 'application/pdf' : isZip ? 'application/zip' : 'application/octet-stream'
+      );
+      res.setHeader('Content-Length', String(fileBytes.byteLength));
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName.replace(/"/g, '')}"`);
+      res.setHeader('Cache-Control', 'no-store');
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.sendFile(safePath);
+      return res.status(200).end(fileBytes);
     } catch {
-      res.status(400).json({ error: 'Invalid export filename.' });
+      return res.status(400).json({ error: 'Invalid export filename.' });
     }
   });
 

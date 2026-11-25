@@ -11,6 +11,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
   FileDown,
   ImagePlus,
   Images,
@@ -47,9 +48,17 @@ import {
   formatBytes,
   parseManuscriptIntoPageTexts,
   pickStylePresetForProduct,
+  sanitizeFolderSlug,
 } from '../lib/workspaceLogic';
 import { rasterizeSvgUrlToPng } from '../lib/api';
+import {
+  buildClientKdpPdfBlob,
+  cacheArtifactBlob,
+  resolveVerifiedArtifactBlob,
+  triggerBlobDownload,
+} from '../lib/clientPdf';
 import { AssetPreviewImage } from './AssetPreviewImage';
+import { PdfPreviewModal } from './PdfPreviewModal';
 
 export type BuilderStep = 1 | 2 | 3 | 4;
 
@@ -295,6 +304,20 @@ export function ProductBuilderView({
   const [buildingZip, setBuildingZip] = useState(false);
   const [latestArtifact, setLatestArtifact] = useState<ExportArtifact | null>(null);
   const [driveUploadingId, setDriveUploadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    fileName: string;
+    blobUrl: string;
+    blob: Blob;
+  } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewState?.blobUrl) {
+        URL.revokeObjectURL(previewState.blobUrl);
+      }
+    };
+  }, [previewState]);
 
   const [error, setError] = useState('');
 
@@ -957,29 +980,118 @@ export function ProductBuilderView({
     setBuildingPdf(true);
     try {
       const chosenAssets = productAssets.filter((a) => selectedAssetIds.includes(a.id));
-      const rasterOverrides: Record<string, string> = {};
-      for (const asset of chosenAssets) {
-        if (asset.mimeType === 'image/svg+xml' || asset.name.endsWith('.svg')) {
-          const png = await rasterizeSvgUrlToPng(asset.url);
-          if (png) rasterOverrides[asset.id] = png;
-        }
-      }
-      const artifact = await onExportPdf({
-        productId: product.id,
-        assetIds: chosenAssets.map((a) => a.id),
+
+      // 1. Build a guaranteed-valid, compact KDP PDF Blob locally (immune to Vercel 4.5MB limit & /tmp cold starts)
+      const clientPdf = await buildClientKdpPdfBlob({
+        product,
+        assets: chosenAssets,
         trimSize: exportTrim,
         includeBleed: exportBleed,
         includeTitlePage,
         includeCaptions: pageLayout !== 'none',
         pageLayout,
         includeCoverTitle,
-        rasterOverrides,
+        authorImprint: settings.authorImprint,
       });
-      setLatestArtifact(artifact);
+
+      // 2. Also persist export metadata on the server for Finished Downloads & Drive sync
+      let artifact: ExportArtifact;
+      try {
+        const rasterOverrides: Record<string, string> = {};
+        for (const asset of chosenAssets) {
+          if (asset.mimeType === 'image/svg+xml' || asset.name.endsWith('.svg')) {
+            const png = await rasterizeSvgUrlToPng(asset.url);
+            if (png) rasterOverrides[asset.id] = png;
+          }
+        }
+        artifact = await onExportPdf({
+          productId: product.id,
+          assetIds: chosenAssets.map((a) => a.id),
+          trimSize: exportTrim,
+          includeBleed: exportBleed,
+          includeTitlePage,
+          includeCaptions: pageLayout !== 'none',
+          pageLayout,
+          includeCoverTitle,
+          rasterOverrides,
+        });
+      } catch {
+        const fallbackName = `${sanitizeFolderSlug(product.title)}-${exportTrim}.pdf`;
+        artifact = {
+          id: `local-${Date.now()}`,
+          productId: product.id,
+          format: 'pdf',
+          fileName: fallbackName,
+          trimSize: exportTrim,
+          includeBleed: exportBleed,
+          pageCount: clientPdf.pageCount,
+          sizeBytes: clientPdf.sizeBytes,
+          downloadUrl: '',
+          driveFileId: null,
+          driveWebLink: null,
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      cacheArtifactBlob(artifact.id, clientPdf.blob);
+      setLatestArtifact({
+        ...artifact,
+        pageCount: clientPdf.pageCount,
+        sizeBytes: clientPdf.sizeBytes,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PDF assembly failed.');
     } finally {
       setBuildingPdf(false);
+    }
+  };
+
+  const handleDownloadExport = async (exp: ExportArtifact) => {
+    setError('');
+    setDownloadingId(exp.id);
+    try {
+      const blob = await resolveVerifiedArtifactBlob({
+        artifact: exp,
+        product: product ?? undefined,
+        assets,
+        authorImprint: settings.authorImprint,
+        pageLayout,
+        includeTitlePage,
+        includeCoverTitle,
+      });
+      triggerBlobDownload(blob, exp.fileName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download file.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handlePreviewPdf = async (exp: ExportArtifact) => {
+    setError('');
+    setDownloadingId(exp.id);
+    try {
+      const blob = await resolveVerifiedArtifactBlob({
+        artifact: exp,
+        product: product ?? undefined,
+        assets,
+        authorImprint: settings.authorImprint,
+        pageLayout,
+        includeTitlePage,
+        includeCoverTitle,
+      });
+      if (previewState?.blobUrl) {
+        URL.revokeObjectURL(previewState.blobUrl);
+      }
+      setPreviewState({
+        fileName: exp.fileName,
+        blobUrl: URL.createObjectURL(blob),
+        blob,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open PDF preview.');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -2503,14 +2615,32 @@ export function ProductBuilderView({
                       {latestArtifact.pageCount} pages · {formatBytes(latestArtifact.sizeBytes)}
                     </div>
                   </div>
-                  <a
-                    href={latestArtifact.downloadUrl}
-                    download={latestArtifact.fileName}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-800 whitespace-nowrap"
-                  >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                    Download Now
-                  </a>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {latestArtifact.format === 'pdf' && (
+                      <button
+                        type="button"
+                        disabled={downloadingId === latestArtifact.id}
+                        onClick={() => handlePreviewPdf(latestArtifact)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-3 py-1.5 font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-60 whitespace-nowrap"
+                      >
+                        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                        Preview
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={downloadingId === latestArtifact.id}
+                      onClick={() => handleDownloadExport(latestArtifact)}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-800 disabled:opacity-60 whitespace-nowrap"
+                    >
+                      {downloadingId === latestArtifact.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      Download Now
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2589,14 +2719,30 @@ export function ProductBuilderView({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <a
-                        href={exp.downloadUrl}
-                        download={exp.fileName}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      {exp.format === 'pdf' && (
+                        <button
+                          type="button"
+                          disabled={downloadingId === exp.id}
+                          onClick={() => handlePreviewPdf(exp)}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                          Preview
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={downloadingId === exp.id}
+                        onClick={() => handleDownloadExport(exp)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                       >
-                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                        {downloadingId === exp.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
                         Download
-                      </a>
+                      </button>
                       {exp.driveWebLink ? (
                         <a
                           href={exp.driveWebLink}
@@ -2633,6 +2779,22 @@ export function ProductBuilderView({
           </section>
         </div>
       )}
+      <PdfPreviewModal
+        open={Boolean(previewState)}
+        fileName={previewState?.fileName ?? ''}
+        blobUrl={previewState?.blobUrl ?? null}
+        onDownload={() => {
+          if (previewState) {
+            triggerBlobDownload(previewState.blob, previewState.fileName);
+          }
+        }}
+        onClose={() => {
+          if (previewState?.blobUrl) {
+            URL.revokeObjectURL(previewState.blobUrl);
+          }
+          setPreviewState(null);
+        }}
+      />
     </div>
   );
 }

@@ -4,7 +4,9 @@ import {
   CloudUpload,
   Download,
   ExternalLink,
+  Eye,
   FileDown,
+  Loader2,
 } from 'lucide-react';
 import type {
   ExportArtifact,
@@ -13,10 +15,17 @@ import type {
   Product,
   StorageAsset,
 } from '../types/workspace';
-import { calculateKdpDimensionsPt, formatBytes } from '../lib/workspaceLogic';
+import { calculateKdpDimensionsPt, formatBytes, sanitizeFolderSlug } from '../lib/workspaceLogic';
 import { rasterizeSvgUrlToPng } from '../lib/api';
+import {
+  buildClientKdpPdfBlob,
+  cacheArtifactBlob,
+  resolveVerifiedArtifactBlob,
+  triggerBlobDownload,
+} from '../lib/clientPdf';
 import { AssetPreviewImage } from './AssetPreviewImage';
 import { ConfirmDialog } from './ConfirmDialog';
+import { PdfPreviewModal } from './PdfPreviewModal';
 
 interface ExportViewProps {
   products: Product[];
@@ -82,6 +91,20 @@ export function ExportView({
 
   const [confirmDriveArtifact, setConfirmDriveArtifact] = useState<ExportArtifact | null>(null);
   const [driveBusy, setDriveBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    fileName: string;
+    blobUrl: string;
+    blob: Blob;
+  } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewState?.blobUrl) {
+        URL.revokeObjectURL(previewState.blobUrl);
+      }
+    };
+  }, [previewState]);
 
   useEffect(() => {
     if (product) {
@@ -113,30 +136,118 @@ export function ExportView({
     setBuildingPdf(true);
     try {
       const chosenAssets = productAssets.filter((a) => selectedAssetIds.includes(a.id));
-      const rasterOverrides: Record<string, string> = {};
-      for (const asset of chosenAssets) {
-        if (asset.mimeType === 'image/svg+xml' || asset.name.endsWith('.svg')) {
-          const pngDataUrl = await rasterizeSvgUrlToPng(asset.url);
-          if (pngDataUrl) rasterOverrides[asset.id] = pngDataUrl;
-        }
-      }
 
-      const artifact = await onExportPdf({
-        productId: product.id,
-        assetIds: chosenAssets.map((a) => a.id),
+      // 1. Build a guaranteed-valid, compact KDP PDF Blob locally (immune to Vercel 4.5MB limit & /tmp cold starts)
+      const clientPdf = await buildClientKdpPdfBlob({
+        product,
+        assets: chosenAssets,
         trimSize,
         includeBleed,
         includeTitlePage,
         includeCaptions: pageLayout !== 'none',
         pageLayout,
         includeCoverTitle,
-        rasterOverrides,
       });
-      setLatestArtifact(artifact);
+
+      // 2. Also record the export on the server for Export History & Google Drive upload
+      let artifact: ExportArtifact;
+      try {
+        const rasterOverrides: Record<string, string> = {};
+        for (const asset of chosenAssets) {
+          if (asset.mimeType === 'image/svg+xml' || asset.name.endsWith('.svg')) {
+            const pngDataUrl = await rasterizeSvgUrlToPng(asset.url);
+            if (pngDataUrl) rasterOverrides[asset.id] = pngDataUrl;
+          }
+        }
+        artifact = await onExportPdf({
+          productId: product.id,
+          assetIds: chosenAssets.map((a) => a.id),
+          trimSize,
+          includeBleed,
+          includeTitlePage,
+          includeCaptions: pageLayout !== 'none',
+          pageLayout,
+          includeCoverTitle,
+          rasterOverrides,
+        });
+      } catch {
+        // Fallback artifact if serverless host rejects large save; user still gets verified client PDF
+        const fallbackName = `${sanitizeFolderSlug(product.title)}-${trimSize}.pdf`;
+        artifact = {
+          id: `local-${Date.now()}`,
+          productId: product.id,
+          format: 'pdf',
+          fileName: fallbackName,
+          trimSize,
+          includeBleed,
+          pageCount: clientPdf.pageCount,
+          sizeBytes: clientPdf.sizeBytes,
+          downloadUrl: '',
+          driveFileId: null,
+          driveWebLink: null,
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      cacheArtifactBlob(artifact.id, clientPdf.blob);
+      setLatestArtifact({
+        ...artifact,
+        pageCount: clientPdf.pageCount,
+        sizeBytes: clientPdf.sizeBytes,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PDF assembly failed.');
     } finally {
       setBuildingPdf(false);
+    }
+  };
+
+  const handleDownloadExport = async (exp: ExportArtifact) => {
+    setError('');
+    setDownloadingId(exp.id);
+    try {
+      const linkedProduct = products.find((p) => p.id === exp.productId) ?? product ?? undefined;
+      const blob = await resolveVerifiedArtifactBlob({
+        artifact: exp,
+        product: linkedProduct,
+        assets,
+        pageLayout: linkedProduct?.id === product?.id ? pageLayout : undefined,
+        includeTitlePage,
+        includeCoverTitle,
+      });
+      triggerBlobDownload(blob, exp.fileName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download file.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handlePreviewPdf = async (exp: ExportArtifact) => {
+    setError('');
+    setDownloadingId(exp.id);
+    try {
+      const linkedProduct = products.find((p) => p.id === exp.productId) ?? product ?? undefined;
+      const blob = await resolveVerifiedArtifactBlob({
+        artifact: exp,
+        product: linkedProduct,
+        assets,
+        pageLayout: linkedProduct?.id === product?.id ? pageLayout : undefined,
+        includeTitlePage,
+        includeCoverTitle,
+      });
+      if (previewState?.blobUrl) {
+        URL.revokeObjectURL(previewState.blobUrl);
+      }
+      setPreviewState({
+        fileName: exp.fileName,
+        blobUrl: URL.createObjectURL(blob),
+        blob,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open PDF preview.');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -352,14 +463,32 @@ export function ExportView({
                   {latestArtifact.pageCount} pages · {formatBytes(latestArtifact.sizeBytes)}
                 </div>
               </div>
-              <a
-                href={latestArtifact.downloadUrl}
-                download={latestArtifact.fileName}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-800 whitespace-nowrap shrink-0"
-              >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                Download
-              </a>
+              <div className="flex items-center gap-2 shrink-0">
+                {latestArtifact.format === 'pdf' && (
+                  <button
+                    type="button"
+                    disabled={downloadingId === latestArtifact.id}
+                    onClick={() => handlePreviewPdf(latestArtifact)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-3 py-1.5 font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-60 whitespace-nowrap shrink-0"
+                  >
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    Preview
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={downloadingId === latestArtifact.id}
+                  onClick={() => handleDownloadExport(latestArtifact)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-800 disabled:opacity-60 whitespace-nowrap shrink-0"
+                >
+                  {downloadingId === latestArtifact.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  Download
+                </button>
+              </div>
             </div>
           )}
 
@@ -431,14 +560,30 @@ export function ExportView({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={exp.downloadUrl}
-                      download={exp.fileName}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+                    {exp.format === 'pdf' && (
+                      <button
+                        type="button"
+                        disabled={downloadingId === exp.id}
+                        onClick={() => handlePreviewPdf(exp)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 whitespace-nowrap shrink-0"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                        Preview
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={downloadingId === exp.id}
+                      onClick={() => handleDownloadExport(exp)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 whitespace-nowrap shrink-0"
                     >
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      {downloadingId === exp.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
                       Download
-                    </a>
+                    </button>
                     {exp.driveWebLink ? (
                       <a
                         href={exp.driveWebLink}
@@ -477,6 +622,23 @@ export function ExportView({
         busy={driveBusy}
         onConfirm={confirmUploadToDrive}
         onCancel={() => setConfirmDriveArtifact(null)}
+      />
+
+      <PdfPreviewModal
+        open={Boolean(previewState)}
+        fileName={previewState?.fileName ?? ''}
+        blobUrl={previewState?.blobUrl ?? null}
+        onDownload={() => {
+          if (previewState) {
+            triggerBlobDownload(previewState.blob, previewState.fileName);
+          }
+        }}
+        onClose={() => {
+          if (previewState?.blobUrl) {
+            URL.revokeObjectURL(previewState.blobUrl);
+          }
+          setPreviewState(null);
+        }}
       />
     </div>
   );

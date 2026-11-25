@@ -716,6 +716,39 @@ test('buildKdpPdfBuffer compiles valid multi-page illustrated book PDFs across l
   });
   assert.equal(facing.pageCount, 6);
   assert.equal(Buffer.from(facing.pdfBytes.slice(0, 5)).toString('ascii'), '%PDF-');
+
+  // Verify classic xref table compatibility (useObjectStreams: false -> zero /ObjStm, has xref & %%EOF)
+  const latin = Buffer.from(classic.pdfBytes).toString('latin1');
+  assert.equal(latin.includes('/ObjStm'), false);
+  assert.equal(latin.includes('xref'), true);
+  assert.equal(latin.trimEnd().endsWith('%%EOF'), true);
 });
+
+test('isValidPdfBytes and detectImageFormat guard against corrupt or HTML/JSON error downloads', async () => {
+  const { isValidPdfBytes, isValidZipBytes, detectImageFormat } = await import('./kdpPdfBuilder.js');
+
+  // Reject JSON 404 or HTML fallback pages pretending to be PDFs
+  assert.equal(isValidPdfBytes(Buffer.from('{"error":"Export file not found."}')), false);
+  assert.equal(isValidPdfBytes(Buffer.from('<!doctype html><html><body>413 Payload Too Large</body></html>')), false);
+  assert.equal(isValidPdfBytes(Buffer.from('%PDF-1.7\ntruncated without eof')), false);
+
+  // Accept well-formed PDF header + trailer
+  const validMinimal = Buffer.from(
+    '%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n'
+  );
+  assert.equal(isValidPdfBytes(validMinimal), true);
+
+  // ZIP magic validation
+  assert.equal(isValidZipBytes(Buffer.from('{"error":"missing"}')), false);
+  const zipHeader = Buffer.alloc(32);
+  zipHeader[0] = 0x50; zipHeader[1] = 0x4b; zipHeader[2] = 0x03; zipHeader[3] = 0x04;
+  assert.equal(isValidZipBytes(zipHeader), true);
+
+  // Image magic-byte detection
+  assert.equal(detectImageFormat(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])), 'png');
+  assert.equal(detectImageFormat(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46])), 'jpg');
+  assert.equal(detectImageFormat(Buffer.from('<html>not an image</html>')), null);
+});
+
 
 
