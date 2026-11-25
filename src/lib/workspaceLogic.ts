@@ -1361,17 +1361,58 @@ function cleanStorySegment(raw: string): string {
 }
 
 /**
- * Parses a generated manuscript (Spread 1..N, Page 1..N, or multi-paragraph text)
- * into clean per-page story passages ready to typeset onto illustrated book pages.
+ * Extracts explicit Visual / Illustration direction lines from a single spread segment.
  */
-export function parseManuscriptIntoPageTexts(
+function extractVisualNoteFromSegment(raw: string): string {
+  const notes: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const colonMatch = trimmed.match(
+      /^(?:\*{0,2})(?:visual|illustration|art|scene)\s*(?:note|direction|prompt|description)?(?:\*{0,2})\s*:\s*(.+)$/i
+    );
+    if (colonMatch && colonMatch[1]) {
+      notes.push(colonMatch[1].replace(/\*\*/g, '').trim());
+      continue;
+    }
+    const bracketMatch = trimmed.match(/^\[(?:visual|illustration|art|scene)[^:\]]*[:\s-]+([^\]]+)\]$/i);
+    if (bracketMatch && bracketMatch[1]) {
+      notes.push(bracketMatch[1].trim());
+    }
+  }
+  return notes.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function summarizeStoryTitle(storyText: string, pageNumber: number, explicitHeading?: string): string {
+  const heading = (explicitHeading ?? '')
+    .replace(/^[-–—:\s*#]+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/[:\s]+$/, '')
+    .trim();
+  if (heading.length >= 3 && heading.length <= 55) {
+    return `Page ${pageNumber} — ${heading}`;
+  }
+  const words = storyText
+    .replace(/["“”]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(' ');
+  const snippet = words.replace(/[,.;!?]+$/, '');
+  return snippet ? `Page ${pageNumber} — ${snippet}` : `Page ${pageNumber}`;
+}
+
+/**
+ * Parses a manuscript into structured per-page spreads containing BOTH the clean read-aloud
+ * `storyText` AND any author/AI `visualNote` so illustrations match every page 1-to-1.
+ */
+export function parseManuscriptIntoSpreads(
   manuscriptNotes?: string | null,
   maxPages = 24
-): string[] {
+): Array<{ pageNumber: number; title: string; storyText: string; visualNote: string }> {
   const raw = String(manuscriptNotes ?? '').trim();
   if (!raw) return [];
 
-  // Strip out [TREND RESEARCH BRIEF] and KDP listing metadata blocks if appended in manuscriptNotes
   let working = raw;
   const kdpSplitIdx = working.search(
     /(?:^|\n)(?:---\s*(?:KDP|Storefront|Listing|Metadata)|(?:#{1,4}\s*)?(?:\*{0,2})(?:KDP|Storefront)\s+(?:Listing|Metadata))/i
@@ -1385,49 +1426,143 @@ export function parseManuscriptIntoPageTexts(
     working = working.slice(nextSection).trim();
   }
 
-  // 1. Primary strategy: split by explicit Spread / Page / Scene markers
   const markerRegex =
-    /(?:^|\n)[ \t]*(?:#{1,4}[ \t]*)?(?:\*{0,2})(?:Spread|Page|Scene)[ \t]*\d+(?:[ \t]*[-–—][ \t]*[^\n:]*)?(?:\*{0,2})[ \t]*(?::[ \t]*|\r?\n)/gi;
+    /(?:^|\n)[ \t]*(?:#{1,4}[ \t]*)?(?:\*{0,2})(?:Spread|Page|Scene)[ \t]*\d+([ \t]*[-–—][ \t]*[^\n:]*)?(?:\*{0,2})[ \t]*(?::[ \t]*|\r?\n)/gi;
   const matches = Array.from(working.matchAll(markerRegex));
 
   if (matches.length >= 1) {
-    const segments: string[] = [];
+    const spreads: Array<{ pageNumber: number; title: string; storyText: string; visualNote: string }> = [];
     for (let i = 0; i < matches.length; i++) {
       const start = (matches[i].index ?? 0) + matches[i][0].length;
       const end = i + 1 < matches.length ? (matches[i + 1].index ?? working.length) : working.length;
-      const cleaned = cleanStorySegment(working.slice(start, end));
-      if (cleaned.length >= 6 && !isLikelyPromptNotStory(cleaned)) {
-        segments.push(cleaned);
+      const slice = working.slice(start, end);
+      const storyText = cleanStorySegment(slice);
+      const visualNote = extractVisualNoteFromSegment(slice);
+      if (storyText.length >= 6 && !isLikelyPromptNotStory(storyText)) {
+        const pageNumber = spreads.length + 1;
+        spreads.push({
+          pageNumber,
+          title: summarizeStoryTitle(storyText, pageNumber, matches[i][1]),
+          storyText,
+          visualNote,
+        });
       }
     }
-    if (segments.length > 0) {
-      return segments.slice(0, maxPages);
+    if (spreads.length > 0) {
+      return spreads.slice(0, maxPages);
     }
   }
 
-  // 2. Fallback: split by blank lines into clean story paragraphs
+  // Fallback: split by blank lines into clean story paragraphs
   const paragraphs = working
     .split(/\n{2,}/)
-    .map((p) => cleanStorySegment(p))
-    .filter((p) => p.length >= 12 && !isLikelyPromptNotStory(p));
+    .map((block) => ({
+      storyText: cleanStorySegment(block),
+      visualNote: extractVisualNoteFromSegment(block),
+    }))
+    .filter((item) => item.storyText.length >= 12 && !isLikelyPromptNotStory(item.storyText));
 
-  return paragraphs.slice(0, maxPages);
+  return paragraphs.slice(0, maxPages).map((item, idx) => ({
+    pageNumber: idx + 1,
+    title: summarizeStoryTitle(item.storyText, idx + 1),
+    storyText: item.storyText,
+    visualNote: item.visualNote,
+  }));
+}
+
+/**
+ * Parses a generated manuscript (Spread 1..N, Page 1..N, or multi-paragraph text)
+ * into clean per-page story passages ready to typeset onto illustrated book pages.
+ */
+export function parseManuscriptIntoPageTexts(
+  manuscriptNotes?: string | null,
+  maxPages = 24
+): string[] {
+  return parseManuscriptIntoSpreads(manuscriptNotes, maxPages).map((s) => s.storyText);
+}
+
+/**
+ * Converts a page's exact read-aloud story text (and optional author visual note) into a
+ * concrete illustration prompt so the generated artwork faithfully depicts what happens on the page.
+ */
+export function buildIllustrationPromptFromStoryText(params: {
+  storyText: string;
+  visualNote?: string;
+  productTitle: string;
+  pageIndex?: number;
+  totalPages?: number;
+  artStylePreset?: string;
+}): string {
+  const cleanStory = params.storyText.trim();
+  const cleanVisual = (params.visualNote ?? '').trim();
+  const pageLabel =
+    typeof params.pageIndex === 'number'
+      ? params.totalPages && params.totalPages > 1
+        ? `Page ${params.pageIndex + 1} of ${params.totalPages}`
+        : `Page ${params.pageIndex + 1}`
+      : 'Storybook page';
+
+  const parts = [
+    `Illustrate this exact scene from "${params.productTitle}" (${pageLabel}): "${cleanStory}"`,
+  ];
+  if (cleanVisual) {
+    parts.push(`Visual staging details: ${cleanVisual}.`);
+  }
+  parts.push(
+    'Faithfully depict every character, creature, object, setting, weather/lighting detail, and emotional expression described in the story text above.'
+  );
+  if (params.artStylePreset?.trim()) {
+    parts.push(`Art style: ${params.artStylePreset.trim()}.`);
+  }
+  parts.push('Leave gentle breathing room at the bottom for typeset text and include zero text or letters inside the illustration.');
+  return parts.join(' ');
+}
+
+/**
+ * Syncs a product's interior illustration prompts 1-to-1 with the parsed story spreads from
+ * `manuscriptNotes`, preserving existing generatedAssetIds where available.
+ */
+export function syncInteriorPromptsFromManuscript(params: {
+  manuscriptNotes?: string | null;
+  productTitle: string;
+  artStylePreset?: string;
+  existingPrompts?: Array<{ id: string; title: string; prompt: string; storyText?: string; generatedAssetId?: string | null }>;
+  maxPages?: number;
+}): Array<{ id: string; title: string; prompt: string; storyText: string; generatedAssetId?: string | null }> {
+  const spreads = parseManuscriptIntoSpreads(params.manuscriptNotes, params.maxPages ?? 12);
+  if (spreads.length === 0) return [];
+
+  const existing = params.existingPrompts ?? [];
+  return spreads.map((spread, idx) => ({
+    id: existing[idx]?.id || `page-${idx + 1}`,
+    title: spread.title,
+    storyText: spread.storyText,
+    prompt: buildIllustrationPromptFromStoryText({
+      storyText: spread.storyText,
+      visualNote: spread.visualNote,
+      productTitle: params.productTitle,
+      pageIndex: idx,
+      totalPages: spreads.length,
+      artStylePreset: params.artStylePreset,
+    }),
+    generatedAssetId: existing[idx]?.generatedAssetId ?? null,
+  }));
 }
 
 const SCENE_CAMERA_DIRECTIVES = [
-  'Establishing wide-angle opening shot — introduce the character in an inviting, sunlit setting with open sky/breathing room.',
-  'Dynamic three-quarter action pose — show the character mid-motion exploring or discovering something exciting, different background from page 1.',
-  'Warm medium close-up — expressive face and eyes reacting with wonder or joy to a new companion or discovery in a fresh environment.',
-  'Playful low-angle adventure shot — rich foreground elements and lively depth, character interacting actively with the scene.',
-  'Over-the-shoulder storytelling angle — looking toward a magical landmark or new vista so the setting feels expansive and distinct.',
-  'Cozy golden-hour wide composition — heartwarming resolved moment with soft warm lighting and calm visual balance.',
-  'Whimsical overhead / bird’s-eye storybook angle — charming winding path or cozy room layout giving fresh visual variety.',
-  'Gentle twilight / bedtime finale framing — peaceful, comforting mood wrapping up the journey under soft starry light.',
+  'Establishing wide-angle opening shot — frame the main character clearly inside the exact setting described in the story text, with clean breathing room.',
+  'Dynamic three-quarter action pose — show the character mid-action doing exactly what the story describes, from a fresh camera angle different from page 1.',
+  'Warm medium close-up — focus on expressive face, eyes, and interaction with the exact companion or object mentioned in this page’s story text.',
+  'Playful low-angle storytelling shot — rich foreground depth highlighting the environment and action described on this page.',
+  'Over-the-shoulder storytelling angle — looking alongside the character toward the focal landmark, companion, or discovery in this page’s text.',
+  'Balanced wide composition — capture the full moment and emotional warmth described in this page’s story with clear visual storytelling.',
+  'Whimsical slightly elevated storybook angle — show the winding path, room, or landscape described in the story text for fresh visual variety.',
+  'Warm concluding wide framing — peaceful, cohesive storybook lighting matching the mood of this page’s story passage.',
 ];
 
 /**
  * Produces a distinct visual framing & pose directive for each page so uploading ONE
- * reference photo yields genuinely varied, dynamic book pages instead of repeating the same pose.
+ * reference photo yields genuinely varied, dynamic book pages without contradicting the story's setting or time of day.
  */
 export function buildSceneVariationDirective(sceneIndex: number, totalScenes?: number): string {
   const safeIdx = Math.max(0, Math.floor(sceneIndex));
@@ -1437,4 +1572,5 @@ export function buildSceneVariationDirective(sceneIndex: number, totalScenes?: n
     : `Page ${safeIdx + 1}`;
   return `${label} composition: ${directive}`;
 }
+
 

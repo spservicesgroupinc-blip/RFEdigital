@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STYLE_PRESET_OPTIONS,
+  buildIllustrationPromptFromStoryText,
   buildPlanStepsFromPromptPack,
   buildPromptPackFromConcept,
   buildPromptPackFromTrend,
@@ -20,10 +21,12 @@ import {
   normalizeKdpTrimSize,
   normalizeTrendOpportunity,
   parseManuscriptIntoPageTexts,
+  parseManuscriptIntoSpreads,
   pickStylePresetForProduct,
   sanitizeFolderSlug,
   sanitizeSourceUrl,
   sanitizeTextForPdf,
+  syncInteriorPromptsFromManuscript,
   transitionJobStatus,
   validateAppsScriptWebAppUrl,
   validateProductInput,
@@ -749,6 +752,100 @@ test('isValidPdfBytes and detectImageFormat guard against corrupt or HTML/JSON e
   assert.equal(detectImageFormat(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46])), 'jpg');
   assert.equal(detectImageFormat(Buffer.from('<html>not an image</html>')), null);
 });
+
+test('parseManuscriptIntoSpreads extracts both storyText and visualNote per spread while ignoring KDP metadata', () => {
+  const manuscript = [
+    '[TREND RESEARCH BRIEF]',
+    'Source Trend: Puppy Rainy Day',
+    'Winning Angle: Warm cozy bedtime adventure',
+    '---',
+    'Page 1:',
+    'Zebo stared out the misty window as silver raindrops tapped against the glass.',
+    'Visual Note: Close-up of a fluffy terrier resting his paws on a wooden windowsill looking out at rain.',
+    '',
+    'Page 2:',
+    'He slipped into his bright yellow raincoat and splashed straight into the biggest puddle in the yard.',
+    '[Visual: Wide low-angle shot of Zebo in a yellow raincoat splashing through a muddy garden puddle]',
+    '',
+    'Page 3:',
+    'Back inside by the fireplace, Zebo shook off sparkling droplets and curled onto his red plaid rug.',
+    '',
+    'KDP Listing & Keywords:',
+    'Keywords: rainy day dog book, toddler puppy story',
+  ].join('\n');
+
+  const spreads = parseManuscriptIntoSpreads(manuscript, 10);
+  assert.equal(spreads.length, 3);
+  assert.equal(spreads[0].pageNumber, 1);
+  assert.ok(spreads[0].storyText.includes('silver raindrops tapped against the glass'));
+  assert.equal(spreads[0].storyText.includes('Visual Note:'), false);
+  assert.ok(spreads[0].visualNote.includes('fluffy terrier resting his paws'));
+
+  assert.equal(spreads[1].pageNumber, 2);
+  assert.ok(spreads[1].storyText.includes('bright yellow raincoat'));
+  assert.ok(spreads[1].visualNote.includes('yellow raincoat splashing'));
+
+  assert.equal(spreads[2].pageNumber, 3);
+  assert.ok(spreads[2].storyText.includes('fireplace'));
+  assert.equal(spreads[2].visualNote, '');
+});
+
+test('buildIllustrationPromptFromStoryText and syncInteriorPromptsFromManuscript align prompts 1-to-1 with story spreads', () => {
+  const prompt = buildIllustrationPromptFromStoryText({
+    storyText: 'Zebo splashed into a giant backyard puddle in his bright yellow raincoat.',
+    visualNote: 'Raindrops arcing off his ears while bluebirds watch from the fence.',
+    productTitle: 'Zebo and the Rainy Day',
+    pageIndex: 1,
+    totalPages: 4,
+    artStylePreset: STYLE_PRESET_OPTIONS[0].value,
+  });
+
+  assert.ok(prompt.includes('Zebo splashed into a giant backyard puddle'));
+  assert.ok(prompt.includes('Raindrops arcing off his ears'));
+  assert.ok(prompt.toLowerCase().includes('zero text'));
+
+  const starterPack = buildPromptPackFromConcept({
+    title: 'Zebo and the Rainy Day',
+    category: 'childrens-book',
+    trimSize: '8.5x8.5',
+    pageCount: 24,
+    concept: 'A puppy who loves jumping in puddles',
+  });
+  starterPack.interiorPrompts[0].generatedAssetId = 'existing-asset-p1';
+
+  const manuscript = [
+    'Page 1:',
+    'Zebo woke up to soft thunder rumbling above the attic roof.',
+    'Visual Note: Cozy bedroom at dawn with rain streaks on the window.',
+    '',
+    'Page 2:',
+    'He grabbed his yellow boots and dashed down the creaky wooden stairs.',
+    'Visual Note: Energetic puppy carrying yellow boots down wooden stairs.',
+  ].join('\n');
+
+  const synced = syncInteriorPromptsFromManuscript({
+    manuscriptNotes: manuscript,
+    existingPrompts: starterPack.interiorPrompts,
+    productTitle: 'Zebo and the Rainy Day',
+    artStylePreset: starterPack.artStylePreset,
+  });
+
+  assert.equal(synced.length, 2);
+  assert.equal(synced[0].generatedAssetId, 'existing-asset-p1');
+  assert.equal(synced[0].storyText, 'Zebo woke up to soft thunder rumbling above the attic roof.');
+  assert.ok(synced[0].prompt.includes('soft thunder rumbling'));
+  assert.ok(synced[0].prompt.includes('Cozy bedroom at dawn'));
+  assert.equal(synced[1].storyText, 'He grabbed his yellow boots and dashed down the creaky wooden stairs.');
+  assert.ok(synced[1].prompt.includes('yellow boots'));
+
+  // Scene camera directives should not hardcode contradictory lighting like "sunlit" or "starry twilight"
+  for (let i = 0; i < 8; i += 1) {
+    const directive = buildSceneVariationDirective(i, 8).toLowerCase();
+    assert.equal(directive.includes('sunlit'), false);
+    assert.equal(directive.includes('starry twilight'), false);
+  }
+});
+
 
 
 

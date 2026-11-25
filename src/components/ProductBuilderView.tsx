@@ -42,13 +42,16 @@ import type {
 } from '../types/workspace';
 import {
   STYLE_PRESET_OPTIONS,
+  buildIllustrationPromptFromStoryText,
   buildPromptPackFromConcept,
   calculateKdpDimensionsPt,
   computeProductReadiness,
   formatBytes,
   parseManuscriptIntoPageTexts,
+  parseManuscriptIntoSpreads,
   pickStylePresetForProduct,
   sanitizeFolderSlug,
+  syncInteriorPromptsFromManuscript,
 } from '../lib/workspaceLogic';
 import { rasterizeSvgUrlToPng } from '../lib/api';
 import {
@@ -130,7 +133,7 @@ interface ProductBuilderViewProps {
     mode: GenerationMode;
     provider: GenerationProvider;
     saveToManuscript: boolean;
-  }) => Promise<void>;
+  }) => Promise<Product | void>;
   onGenerateIllustration: (payload: {
     productId: string;
     prompt: string;
@@ -143,6 +146,7 @@ interface ProductBuilderViewProps {
     totalScenes?: number;
     storyText?: string;
     textPlacement?: PageTextLayout;
+    replaceAssetId?: string;
   }) => Promise<StorageAsset>;
   onUploadAsset: (payload: {
     productId: string;
@@ -291,6 +295,7 @@ export function ProductBuilderView({
     Record<string, { storyText: string; textPlacement: PageTextLayout | '' }>
   >({});
   const [savingAssetId, setSavingAssetId] = useState<string | null>(null);
+  const [regeneratingAssetId, setRegeneratingAssetId] = useState<string | null>(null);
   const [autoFillingPages, setAutoFillingPages] = useState(false);
 
   // Step 4: Export State
@@ -366,6 +371,11 @@ export function ProductBuilderView({
   const productExports = useMemo(
     () => exportsList.filter((e) => e.productId === productId),
     [exportsList, productId]
+  );
+
+  const parsedStorySpreads = useMemo(
+    () => parseManuscriptIntoSpreads(product?.manuscriptNotes, 24),
+    [product?.manuscriptNotes]
   );
 
   const readiness = useMemo(
@@ -663,14 +673,43 @@ export function ProductBuilderView({
   const handleGenerateStory = () =>
     runSinglePrompt('manuscript', async () => {
       if (!product || !editablePack?.manuscriptPrompt.trim()) return;
-      await onGenerateText({
+      const updated = await onGenerateText({
         productId: product.id,
         prompt: editablePack.manuscriptPrompt.trim(),
         mode: 'manuscript',
         provider,
         saveToManuscript: true,
       });
+      if (updated?.promptPack) {
+        setEditablePack(updated.promptPack);
+        setPromptDirty(false);
+      }
     });
+
+  const handleSyncPromptsFromStory = async () => {
+    if (!product || !editablePack) return;
+    const synced = syncInteriorPromptsFromManuscript({
+      manuscriptNotes: product.manuscriptNotes,
+      productTitle: product.title,
+      artStylePreset,
+      existingPrompts: editablePack.interiorPrompts,
+      maxPages: 12,
+    });
+    if (synced.length === 0) {
+      setError('Write or generate your Story / Interior Copy first so prompts can match your story pages.');
+      return;
+    }
+    setError('');
+    const nextPack: ProductPromptPack = {
+      ...editablePack,
+      artStylePreset,
+      interiorPrompts: synced,
+      updatedAt: new Date().toISOString(),
+    };
+    setEditablePack(nextPack);
+    setPromptDirty(false);
+    await onUpdateProduct(product.id, { promptPack: nextPack });
+  };
 
   const handleGenerateListing = () =>
     runSinglePrompt('kdp-metadata', async () => {
@@ -689,7 +728,7 @@ export function ProductBuilderView({
       if (!product || !editablePack) return;
       const item = editablePack.interiorPrompts[pageIndex];
       if (!item || !item.prompt.trim()) return;
-      const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
+      const matchedStory = item.storyText?.trim() || parsedStorySpreads[pageIndex]?.storyText || '';
       const createdAsset = await onGenerateIllustration({
         productId: product.id,
         prompt: item.prompt.trim(),
@@ -698,12 +737,14 @@ export function ProductBuilderView({
         kind: 'illustration',
         sceneIndex: pageIndex,
         totalScenes: editablePack.interiorPrompts.length,
-        storyText: parsedPages[pageIndex] || undefined,
+        storyText: matchedStory || undefined,
         ...getRefPayload(),
       });
 
       const nextInteriors = editablePack.interiorPrompts.map((p, idx) =>
-        idx === pageIndex ? { ...p, generatedAssetId: createdAsset.id } : p
+        idx === pageIndex
+          ? { ...p, storyText: matchedStory || p.storyText, generatedAssetId: createdAsset.id }
+          : p
       );
       const nextPack: ProductPromptPack = {
         ...editablePack,
@@ -721,11 +762,28 @@ export function ProductBuilderView({
     setRunningKey('photo-pages');
     try {
       const saved = (await handleSavePromptEdits()) ?? editablePack;
-      const workingPack = {
+      let workingPack = {
         ...saved,
         interiorPrompts: saved.interiorPrompts.map((p) => ({ ...p })),
       };
-      const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
+      // If story exists and prompts aren't yet linked to story text, align them automatically first
+      if (
+        parsedStorySpreads.length > 0 &&
+        workingPack.interiorPrompts.every((p) => !p.storyText?.trim())
+      ) {
+        const synced = syncInteriorPromptsFromManuscript({
+          manuscriptNotes: product.manuscriptNotes,
+          productTitle: product.title,
+          artStylePreset,
+          existingPrompts: workingPack.interiorPrompts,
+          maxPages: Math.max(workingPack.interiorPrompts.length, parsedStorySpreads.length),
+        });
+        if (synced.length > 0) {
+          workingPack = { ...workingPack, interiorPrompts: synced };
+          setEditablePack(workingPack);
+          await onUpdateProduct(product.id, { promptPack: workingPack });
+        }
+      }
       const refPayload = getRefPayload();
 
       const tasks: Array<{ label: string; run: () => Promise<void> }> = [];
@@ -747,6 +805,7 @@ export function ProductBuilderView({
 
       workingPack.interiorPrompts.forEach((page, idx) => {
         if (page.prompt.trim()) {
+          const matchedStory = page.storyText?.trim() || parsedStorySpreads[idx]?.storyText || '';
           tasks.push({
             label: page.title || `Scene ${idx + 1}`,
             run: async () => {
@@ -758,11 +817,12 @@ export function ProductBuilderView({
                 kind: 'illustration',
                 sceneIndex: idx,
                 totalScenes: workingPack.interiorPrompts.length,
-                storyText: parsedPages[idx] || undefined,
+                storyText: matchedStory || undefined,
                 ...refPayload,
               });
               workingPack.interiorPrompts[idx] = {
                 ...workingPack.interiorPrompts[idx],
+                storyText: matchedStory || workingPack.interiorPrompts[idx].storyText,
                 generatedAssetId: asset.id,
               };
               setEditablePack({ ...workingPack });
@@ -774,7 +834,7 @@ export function ProductBuilderView({
 
       for (let i = 0; i < tasks.length; i++) {
         setBatchStatus(
-          `Generating distinct page ${i + 1} of ${tasks.length} from your photo: ${tasks[i].label}…`
+          `Generating story-matched page ${i + 1} of ${tasks.length} from your photo: ${tasks[i].label}…`
         );
         await tasks[i].run();
       }
@@ -799,33 +859,63 @@ export function ProductBuilderView({
     try {
       const saved = (await handleSavePromptEdits()) ?? editablePack;
       let workingPack = { ...saved, interiorPrompts: saved.interiorPrompts.map((p) => ({ ...p })) };
+      let latestManuscript = product.manuscriptNotes;
       const refPayload = getRefPayload();
 
-      const tasks: Array<{ label: string; run: () => Promise<void> }> = [];
+      // Step A: Generate story manuscript FIRST so every interior illustration matches the actual story!
       if (workingPack.manuscriptPrompt.trim()) {
-        tasks.push({
-          label: 'Story / Interior Copy',
-          run: () =>
-            onGenerateText({
-              productId: product.id,
-              prompt: workingPack.manuscriptPrompt.trim(),
-              mode: 'manuscript',
-              provider,
-              saveToManuscript: true,
-            }),
+        setBatchStatus('Step 1: Writing story manuscript & matching illustration prompts…');
+        const updated = await onGenerateText({
+          productId: product.id,
+          prompt: workingPack.manuscriptPrompt.trim(),
+          mode: 'manuscript',
+          provider,
+          saveToManuscript: true,
         });
+        if (updated) {
+          latestManuscript = updated.manuscriptNotes;
+          if (updated.promptPack && updated.promptPack.interiorPrompts.length > 0) {
+            workingPack = {
+              ...updated.promptPack,
+              interiorPrompts: updated.promptPack.interiorPrompts.map((p) => ({ ...p })),
+            };
+            setEditablePack(workingPack);
+          }
+        }
       }
+
+      const freshSpreads = parseManuscriptIntoSpreads(latestManuscript, 24);
+      if (
+        freshSpreads.length > 0 &&
+        workingPack.interiorPrompts.every((p) => !p.storyText?.trim())
+      ) {
+        const synced = syncInteriorPromptsFromManuscript({
+          manuscriptNotes: latestManuscript,
+          productTitle: product.title,
+          artStylePreset,
+          existingPrompts: workingPack.interiorPrompts,
+          maxPages: Math.max(workingPack.interiorPrompts.length, freshSpreads.length),
+        });
+        if (synced.length > 0) {
+          workingPack = { ...workingPack, interiorPrompts: synced };
+          setEditablePack(workingPack);
+          await onUpdateProduct(product.id, { promptPack: workingPack });
+        }
+      }
+
+      const tasks: Array<{ label: string; run: () => Promise<void> }> = [];
       if (workingPack.kdpMetadataPrompt.trim()) {
         tasks.push({
           label: 'KDP Listing & Keywords',
-          run: () =>
-            onGenerateText({
+          run: async () => {
+            await onGenerateText({
               productId: product.id,
               prompt: workingPack.kdpMetadataPrompt.trim(),
               mode: 'kdp-metadata',
               provider,
               saveToManuscript: true,
-            }),
+            });
+          },
         });
       }
       if (workingPack.coverPrompt.trim()) {
@@ -846,6 +936,7 @@ export function ProductBuilderView({
 
       workingPack.interiorPrompts.forEach((page, idx) => {
         if (page.prompt.trim() && !page.generatedAssetId) {
+          const matchedStory = page.storyText?.trim() || freshSpreads[idx]?.storyText || '';
           tasks.push({
             label: page.title || `Interior Page ${idx + 1}`,
             run: async () => {
@@ -857,10 +948,12 @@ export function ProductBuilderView({
                 kind: 'illustration',
                 sceneIndex: idx,
                 totalScenes: workingPack.interiorPrompts.length,
+                storyText: matchedStory || undefined,
                 ...refPayload,
               });
               workingPack.interiorPrompts[idx] = {
                 ...workingPack.interiorPrompts[idx],
+                storyText: matchedStory || workingPack.interiorPrompts[idx].storyText,
                 generatedAssetId: asset.id,
               };
               setEditablePack({ ...workingPack });
@@ -885,6 +978,55 @@ export function ProductBuilderView({
       );
     } finally {
       setRunningKey(null);
+    }
+  };
+
+  const handleMatchArtToPageText = async (asset: StorageAsset, interiorIndex: number) => {
+    if (!product) return;
+    const draft = pageDrafts[asset.id] ?? {
+      storyText: asset.storyText ?? '',
+      textPlacement: (asset.textPlacement ?? '') as PageTextLayout | '',
+    };
+    const cleanStory = draft.storyText.trim();
+    if (!cleanStory) {
+      setError('Enter story text for this page first so the illustration can match it.');
+      return;
+    }
+
+    setError('');
+    setRegeneratingAssetId(asset.id);
+    try {
+      // Save any edited text/placement first
+      await onUpdateAsset(asset.id, {
+        storyText: cleanStory,
+        textPlacement: draft.textPlacement,
+      });
+
+      const storyMatchedPrompt = buildIllustrationPromptFromStoryText({
+        storyText: cleanStory,
+        productTitle: product.title,
+        pageIndex: interiorIndex,
+        totalPages: Math.max(1, productAssets.filter((a) => a.kind !== 'cover').length),
+        artStylePreset,
+      });
+
+      await onGenerateIllustration({
+        productId: product.id,
+        prompt: storyMatchedPrompt,
+        stylePreset: artStylePreset,
+        provider,
+        kind: 'illustration',
+        sceneIndex: interiorIndex,
+        totalScenes: Math.max(1, productAssets.filter((a) => a.kind !== 'cover').length),
+        storyText: cleanStory,
+        textPlacement: draft.textPlacement || undefined,
+        replaceAssetId: asset.id,
+        ...getRefPayload(),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not regenerate illustration for this page.');
+    } finally {
+      setRegeneratingAssetId(null);
     }
   };
 
@@ -1900,23 +2042,39 @@ export function ProductBuilderView({
                     Edit each page or spread prompt before generating, or add extra pages.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updatePackField('interiorPrompts', [
-                      ...editablePack.interiorPrompts,
-                      {
-                        id: `page-${Date.now().toString(36)}`,
-                        title: `Page ${editablePack.interiorPrompts.length + 1} — New Scene`,
-                        prompt: `Publication-ready interior illustration for "${product.title}" matching the established art style and ${product.trimSize}" composition.`,
-                      },
-                    ])
-                  }
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  Add Page Prompt
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={parsedStorySpreads.length === 0 || Boolean(runningKey)}
+                    onClick={handleSyncPromptsFromStory}
+                    title={
+                      parsedStorySpreads.length > 0
+                        ? `Sync all page prompts to your ${parsedStorySpreads.length} story spreads`
+                        : 'Generate or write story text first'
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-45 whitespace-nowrap"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    Sync Prompts From Story{parsedStorySpreads.length > 0 ? ` (${parsedStorySpreads.length})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updatePackField('interiorPrompts', [
+                        ...editablePack.interiorPrompts,
+                        {
+                          id: `page-${Date.now().toString(36)}`,
+                          title: `Page ${editablePack.interiorPrompts.length + 1} — New Scene`,
+                          prompt: `Publication-ready interior illustration for "${product.title}" matching the established art style and ${product.trimSize}" composition.`,
+                        },
+                      ])
+                    }
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    Add Page Prompt
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200">
@@ -1925,6 +2083,8 @@ export function ProductBuilderView({
                     ? assets.find((a) => a.id === page.generatedAssetId)
                     : null;
                   const isRunningThis = runningKey === `page-${idx}`;
+                  const matchedStoryText =
+                    page.storyText?.trim() || parsedStorySpreads[idx]?.storyText || '';
                   return (
                     <div key={page.id || idx} className="p-4">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1992,6 +2152,13 @@ export function ProductBuilderView({
                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       </div>
+
+                      {matchedStoryText && (
+                        <div className="mt-2 rounded-md border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-[11px] leading-relaxed text-amber-950">
+                          <span className="font-semibold text-amber-900">Matched Story Text: </span>
+                          <span className="italic">&ldquo;{matchedStoryText}&rdquo;</span>
+                        </div>
+                      )}
 
                       <div className="mt-2.5 flex flex-col gap-3 sm:flex-row">
                         <textarea
@@ -2355,23 +2522,55 @@ export function ProductBuilderView({
                                   ))}
                                 </select>
 
-                                <button
-                                  type="button"
-                                  disabled={!isDirty || savingAssetId === asset.id}
-                                  onClick={() => handleSavePageDesign(asset)}
-                                  className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                                    isDirty
-                                      ? 'bg-blue-700 text-white hover:bg-blue-800'
-                                      : 'border border-slate-200 bg-slate-50 text-slate-400'
-                                  }`}
-                                >
-                                  <Save className="h-3 w-3" aria-hidden="true" />
-                                  {savingAssetId === asset.id
-                                    ? 'Saving…'
-                                    : isDirty
-                                      ? 'Save Page Text'
-                                      : 'Saved'}
-                                </button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      !draft.storyText.trim() ||
+                                      regeneratingAssetId === asset.id ||
+                                      Boolean(runningKey)
+                                    }
+                                    onClick={() => {
+                                      const interiorIdx = Math.max(
+                                        0,
+                                        productAssets
+                                          .filter((a) => a.kind !== 'cover')
+                                          .findIndex((a) => a.id === asset.id)
+                                      );
+                                      handleMatchArtToPageText(asset, interiorIdx);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-md border border-blue-700 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50 whitespace-nowrap"
+                                  >
+                                    {regeneratingAssetId === asset.id ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                        Matching Art…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="h-3 w-3" aria-hidden="true" />
+                                        Match Art to Text
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!isDirty || savingAssetId === asset.id}
+                                    onClick={() => handleSavePageDesign(asset)}
+                                    className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                                      isDirty
+                                        ? 'bg-blue-700 text-white hover:bg-blue-800'
+                                        : 'border border-slate-200 bg-slate-50 text-slate-400'
+                                    }`}
+                                  >
+                                    <Save className="h-3 w-3" aria-hidden="true" />
+                                    {savingAssetId === asset.id
+                                      ? 'Saving…'
+                                      : isDirty
+                                        ? 'Save Page Text'
+                                        : 'Saved'}
+                                  </button>
+                                </div>
                               </div>
                             </>
                           )}

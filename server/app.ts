@@ -34,8 +34,9 @@ import {
   expandPlanToJobs,
   getNextRunnableJob,
   mapTrendOpportunityToProjectSeed,
-  parseManuscriptIntoPageTexts,
+  parseManuscriptIntoSpreads,
   sanitizeFolderSlug,
+  syncInteriorPromptsFromManuscript,
   transitionJobStatus,
   validateProductInput,
   validateTokenName,
@@ -123,6 +124,10 @@ function sanitizePromptPack(raw: unknown): ProductPromptPack | null {
       id: String(item.id ?? `page-${idx + 1}`).trim().slice(0, 48) || `page-${idx + 1}`,
       title: String(item.title ?? `Page ${idx + 1}`).trim().slice(0, 100),
       prompt: String(item.prompt ?? '').trim().slice(0, 1500),
+      storyText:
+        typeof item.storyText === 'string' && item.storyText.trim()
+          ? item.storyText.trim().slice(0, 1600)
+          : undefined,
       generatedAssetId:
         typeof item.generatedAssetId === 'string' && item.generatedAssetId.trim()
           ? item.generatedAssetId.trim().slice(0, 64)
@@ -446,6 +451,10 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
       const isCoverJob = /cover/i.test(job.title) && !product.coverAssetId;
       const sceneIdx = existingIllustrations.filter((a) => a.kind !== 'cover').length;
 
+      const manuscriptSpreads = parseManuscriptIntoSpreads(product.manuscriptNotes, 24);
+      const matchedSpread = !isCoverJob ? manuscriptSpreads[sceneIdx] : undefined;
+      const autoStoryText = matchedSpread?.storyText ?? '';
+
       const generated = await generateStorybookIllustration({
         prompt: job.prompt,
         stylePreset:
@@ -455,8 +464,10 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
         productTitle: product.title,
         referenceImageDataUrl,
         sceneIndex: isCoverJob ? undefined : sceneIdx,
-        totalScenes: Math.max(4, product.promptPack?.interiorPrompts.length ?? 4),
+        totalScenes: Math.max(4, manuscriptSpreads.length || product.promptPack?.interiorPrompts.length || 4),
         isCover: isCoverJob,
+        storyText: autoStoryText || undefined,
+        visualNote: matchedSpread?.visualNote || undefined,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
@@ -465,9 +476,6 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
         .slice(0, 6)}${generated.extension}`;
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
       fs.writeFileSync(targetPath, generated.buffer);
-
-      const manuscriptPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
-      const autoStoryText = !isCoverJob ? manuscriptPages[sceneIdx] ?? '' : '';
 
       const productAssets = raw.assets.filter((a) => a.productId === product.id);
       const asset: StorageAsset = {
@@ -1217,9 +1225,37 @@ export function createApiApp(): express.Express {
       raw.generations.unshift(record);
 
       if (saveToManuscript) {
-        product.manuscriptNotes = product.manuscriptNotes
-          ? `${product.manuscriptNotes}\n\n${result.text}`
-          : result.text;
+        if (chosenMode === 'kdp-metadata') {
+          product.manuscriptNotes = product.manuscriptNotes
+            ? `${product.manuscriptNotes}\n\n--- KDP Listing & Metadata ---\n${result.text}`
+            : `--- KDP Listing & Metadata ---\n${result.text}`;
+        } else {
+          // Keep any leading [TREND RESEARCH BRIEF] separated with --- so spread parser extracts the fresh story cleanly
+          const existing = (product.manuscriptNotes ?? '').trim();
+          if (existing.startsWith('[TREND RESEARCH BRIEF]')) {
+            const splitIdx = existing.search(/\n---\s/);
+            const briefOnly = splitIdx > 0 ? existing.slice(0, splitIdx).trim() : existing;
+            product.manuscriptNotes = `${briefOnly}\n\n---\n\n${result.text}`;
+          } else {
+            product.manuscriptNotes = result.text;
+          }
+
+          // Automatically align the product's interior illustration prompts to the freshly generated story spreads!
+          const syncedInteriors = syncInteriorPromptsFromManuscript({
+            manuscriptNotes: product.manuscriptNotes,
+            productTitle: product.title,
+            artStylePreset: product.promptPack?.artStylePreset,
+            existingPrompts: product.promptPack?.interiorPrompts,
+            maxPages: 12,
+          });
+          if (syncedInteriors.length > 0 && product.promptPack) {
+            product.promptPack = {
+              ...product.promptPack,
+              interiorPrompts: syncedInteriors,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+        }
         product.updatedAt = new Date().toISOString();
       }
       workspaceStore.save();
@@ -1252,6 +1288,7 @@ export function createApiApp(): express.Express {
       totalScenes,
       storyText,
       textPlacement,
+      replaceAssetId,
     } = req.body as {
       productId?: string;
       prompt?: string;
@@ -1268,6 +1305,7 @@ export function createApiApp(): express.Express {
       totalScenes?: number;
       storyText?: string;
       textPlacement?: PageTextLayout;
+      replaceAssetId?: string;
     };
 
     const raw = workspaceStore.getRaw();
@@ -1324,10 +1362,21 @@ export function createApiApp(): express.Express {
           : isCover
             ? undefined
             : existingInteriorCount;
+      const manuscriptSpreads = parseManuscriptIntoSpreads(product.manuscriptNotes, 24);
       const resolvedTotalScenes =
         typeof totalScenes === 'number' && Number.isFinite(totalScenes) && totalScenes >= 1
           ? Math.floor(totalScenes)
-          : Math.max(4, product.promptPack?.interiorPrompts.length ?? 4);
+          : Math.max(4, manuscriptSpreads.length || product.promptPack?.interiorPrompts.length || 4);
+
+      // CRITICAL: Resolve storyText & author visualNote BEFORE generating the illustration
+      // so the AI image model depicts the exact scene, setting, props, and action from the story!
+      const matchIdx = resolvedSceneIndex ?? existingInteriorCount;
+      const matchedSpread = !isCover ? manuscriptSpreads[matchIdx] : undefined;
+      let resolvedStoryText = typeof storyText === 'string' ? storyText.trim().slice(0, 1600) : '';
+      if (!resolvedStoryText && !isCover && matchedSpread?.storyText) {
+        resolvedStoryText = matchedSpread.storyText;
+      }
+      const resolvedVisualNote = !isCover ? matchedSpread?.visualNote ?? '' : '';
 
       const generated = await generateStorybookIllustration({
         prompt: prompt.trim(),
@@ -1341,6 +1390,8 @@ export function createApiApp(): express.Express {
         sceneIndex: resolvedSceneIndex,
         totalScenes: resolvedTotalScenes,
         isCover,
+        storyText: resolvedStoryText || undefined,
+        visualNote: resolvedVisualNote || undefined,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
@@ -1350,38 +1401,47 @@ export function createApiApp(): express.Express {
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
       fs.writeFileSync(targetPath, generated.buffer);
 
-      // Attach explicit storyText, or auto-assign the matching read-aloud page text from manuscript
-      let resolvedStoryText = typeof storyText === 'string' ? storyText.trim().slice(0, 1600) : '';
-      if (!resolvedStoryText && !isCover) {
-        const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
-        const matchIdx = resolvedSceneIndex ?? existingInteriorCount;
-        if (parsedPages[matchIdx]) {
-          resolvedStoryText = parsedPages[matchIdx];
+      // If replaceAssetId is provided (e.g. "Match Art to Text" in Step 3), update that page cleanly in place!
+      const existingTarget =
+        typeof replaceAssetId === 'string' && replaceAssetId.trim()
+          ? raw.assets.find((a) => a.id === replaceAssetId.trim() && a.productId === product.id)
+          : undefined;
+
+      let asset: StorageAsset;
+      if (existingTarget) {
+        existingTarget.name = fileName;
+        existingTarget.mimeType = generated.mimeType;
+        existingTarget.sizeBytes = generated.buffer.byteLength;
+        existingTarget.url = `/api/storage/files/${fileName}`;
+        existingTarget.caption = generated.caption;
+        if (resolvedStoryText) existingTarget.storyText = resolvedStoryText;
+        if (isValidPageTextLayout(textPlacement)) existingTarget.textPlacement = textPlacement;
+        existingTarget.driveFileId = null;
+        existingTarget.driveWebLink = null;
+        asset = existingTarget;
+      } else {
+        const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
+        asset = {
+          id: `asset-${crypto.randomUUID().slice(0, 8)}`,
+          folderId: folder.id,
+          productId: product.id,
+          name: fileName,
+          kind: isCover ? 'cover' : 'illustration',
+          mimeType: generated.mimeType,
+          sizeBytes: generated.buffer.byteLength,
+          url: `/api/storage/files/${fileName}`,
+          caption: generated.caption,
+          storyText: resolvedStoryText || undefined,
+          textPlacement: isValidPageTextLayout(textPlacement) ? textPlacement : undefined,
+          pageOrder: existingCount + 1,
+          driveFileId: null,
+          driveWebLink: null,
+          createdAt: new Date().toISOString(),
+        };
+        raw.assets.push(asset);
+        if (asset.kind === 'cover' || !product.coverAssetId) {
+          product.coverAssetId = asset.id;
         }
-      }
-
-      const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
-      const asset: StorageAsset = {
-        id: `asset-${crypto.randomUUID().slice(0, 8)}`,
-        folderId: folder.id,
-        productId: product.id,
-        name: fileName,
-        kind: isCover ? 'cover' : 'illustration',
-        mimeType: generated.mimeType,
-        sizeBytes: generated.buffer.byteLength,
-        url: `/api/storage/files/${fileName}`,
-        caption: generated.caption,
-        storyText: resolvedStoryText || undefined,
-        textPlacement: isValidPageTextLayout(textPlacement) ? textPlacement : undefined,
-        pageOrder: existingCount + 1,
-        driveFileId: null,
-        driveWebLink: null,
-        createdAt: new Date().toISOString(),
-      };
-
-      raw.assets.push(asset);
-      if (asset.kind === 'cover' || !product.coverAssetId) {
-        product.coverAssetId = asset.id;
       }
 
       const record = {

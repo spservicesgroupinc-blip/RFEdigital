@@ -24,8 +24,9 @@ import type {
 } from '../types/workspace';
 import {
   STYLE_PRESET_OPTIONS,
+  buildIllustrationPromptFromStoryText,
   buildPromptPackFromConcept,
-  parseManuscriptIntoPageTexts,
+  parseManuscriptIntoSpreads,
 } from '../lib/workspaceLogic';
 import { AssetPreviewImage } from './AssetPreviewImage';
 
@@ -242,8 +243,38 @@ export function GenerationView({
     [galleryImages, selectedGalleryImageId]
   );
 
-  // Seed multi-page scene prompts from active product prompt pack when product changes
+  const storySpreads = useMemo(
+    () => parseManuscriptIntoSpreads(selectedProduct?.manuscriptNotes, 12),
+    [selectedProduct?.manuscriptNotes]
+  );
+
+  // Seed multi-page scene prompts directly from the product's actual story spreads when available,
+  // falling back to prompt pack scenes so generated illustrations always match the story text.
   useEffect(() => {
+    if (storySpreads.length >= 1) {
+      const fromStory = storySpreads.map((spread, idx) =>
+        buildIllustrationPromptFromStoryText({
+          storyText: spread.storyText,
+          visualNote: spread.visualNote,
+          productTitle: selectedProduct?.title ?? 'this book',
+          pageIndex: idx,
+          totalPages: storySpreads.length,
+          artStylePreset: stylePreset,
+        })
+      );
+      setMultiPagePrompts((prev) => {
+        const next = [...fromStory];
+        while (next.length < 6) {
+          next.push(
+            prev[next.length] ||
+              `New distinct storybook scene ${next.length + 1} for "${selectedProduct?.title ?? 'this book'}" featuring the main character in an expressive pose and fresh environment.`
+          );
+        }
+        return next.slice(0, 6);
+      });
+      return;
+    }
+
     if (!activePromptPack) return;
     const basePrompts = activePromptPack.interiorPrompts.map((p) => p.prompt).filter(Boolean);
     if (basePrompts.length >= 3) {
@@ -258,7 +289,7 @@ export function GenerationView({
         return next.slice(0, 6);
       });
     }
-  }, [productId]);
+  }, [productId, selectedProduct?.manuscriptNotes]);
 
   const showNewProductInput = products.length === 0 || creatingNewProduct;
   const hasActiveReference = Boolean(
@@ -327,10 +358,10 @@ export function GenerationView({
         setNewProductTitle('');
       }
 
-      const parsedPages = parseManuscriptIntoPageTexts(selectedProduct?.manuscriptNotes ?? '', scenes.length);
+      const matchedSpreads = parseManuscriptIntoSpreads(selectedProduct?.manuscriptNotes ?? '', scenes.length);
 
       for (let i = 0; i < scenes.length; i++) {
-        setMultiPageProgress(`Generating distinct book page ${i + 1} of ${scenes.length} from your photo…`);
+        setMultiPageProgress(`Generating story-matched page ${i + 1} of ${scenes.length} from your photo…`);
         await onGenerateIllustration({
           productId: targetProductId,
           prompt: scenes[i],
@@ -348,7 +379,7 @@ export function GenerationView({
           saveReferenceToProduct: Boolean(i === 0 && uploadedPhoto && saveReferenceToProduct),
           sceneIndex: i,
           totalScenes: scenes.length,
-          storyText: parsedPages[i] || undefined,
+          storyText: matchedSpreads[i]?.storyText || undefined,
         });
       }
       setMultiPageProgress(null);
@@ -848,30 +879,38 @@ export function GenerationView({
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          {Array.from({ length: multiPageCount }).map((_, idx) => (
-                            <div key={idx}>
-                              <label
-                                htmlFor={`multi-scene-${idx}`}
-                                className="block text-[11px] font-medium text-slate-600"
-                              >
-                                Page {idx + 1} Scene (distinct camera angle &amp; pose auto-applied)
-                              </label>
-                              <input
-                                id={`multi-scene-${idx}`}
-                                type="text"
-                                value={multiPagePrompts[idx] ?? ''}
-                                onChange={(e) =>
-                                  setMultiPagePrompts((prev) => {
-                                    const next = [...prev];
-                                    next[idx] = e.target.value;
-                                    return next;
-                                  })
-                                }
-                                className="mt-0.5 w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-700 focus:outline-none"
-                              />
-                            </div>
-                          ))}
+                        <div className="space-y-2.5">
+                          {Array.from({ length: multiPageCount }).map((_, idx) => {
+                            const matchedStory = storySpreads[idx]?.storyText;
+                            return (
+                              <div key={idx}>
+                                <label
+                                  htmlFor={`multi-scene-${idx}`}
+                                  className="block text-[11px] font-medium text-slate-600"
+                                >
+                                  Page {idx + 1} Scene {matchedStory ? '(matched to story text)' : '(distinct camera angle & pose auto-applied)'}
+                                </label>
+                                {matchedStory && (
+                                  <div className="mt-0.5 rounded bg-slate-50 px-2 py-1 text-[11px] italic text-slate-600 line-clamp-2">
+                                    Story: &ldquo;{matchedStory}&rdquo;
+                                  </div>
+                                )}
+                                <input
+                                  id={`multi-scene-${idx}`}
+                                  type="text"
+                                  value={multiPagePrompts[idx] ?? ''}
+                                  onChange={(e) =>
+                                    setMultiPagePrompts((prev) => {
+                                      const next = [...prev];
+                                      next[idx] = e.target.value;
+                                      return next;
+                                    })
+                                  }
+                                  className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-700 focus:outline-none"
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {multiPageProgress && (

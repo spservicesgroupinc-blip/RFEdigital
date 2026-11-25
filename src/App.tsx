@@ -823,9 +823,14 @@ export default function App() {
                     return promptPack;
                   }}
                   onGenerateText={async (payload) => {
-                    await workspaceApi.generateText(payload);
+                    const { product: updatedProduct } = await workspaceApi.generateText(payload);
                     await refreshWorkspace();
-                    showNotice('Generated copy saved to your product.');
+                    showNotice(
+                      payload.mode === 'manuscript' && payload.saveToManuscript
+                        ? 'Story copy saved and interior page prompts matched to your story.'
+                        : 'Generated copy saved to your product.'
+                    );
+                    return updatedProduct;
                   }}
                   onGenerateIllustration={async (payload) => {
                     const { asset } = await workspaceApi.generateIllustration(payload);

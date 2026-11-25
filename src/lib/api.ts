@@ -188,6 +188,7 @@ export const workspaceApi = {
     totalScenes?: number;
     storyText?: string;
     textPlacement?: PageTextLayout;
+    replaceAssetId?: string;
   }) =>
     requestJson<{ record: GenerationRecord; asset: StorageAsset; product?: Product }>(
       '/api/generate/illustration',

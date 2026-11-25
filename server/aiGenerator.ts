@@ -80,7 +80,15 @@ export async function generatePublishingText(params: {
   const systemInstruction =
     params.mode === 'kdp-metadata'
       ? `You are a senior Amazon KDP publishing strategist. Write crisp, high-converting book descriptions, subtitle ideas, BISAC categories, and 7 backend keywords for "${params.productTitle}" (${params.category}). Use clean formatting without markdown code fences.`
-      : `You are an award-winning children's book author and independent publisher. Write clean, publication-ready manuscript text or page-by-page spread copy for "${params.productTitle}" (${params.category}). Keep prose rhythmic, warm, and ready to typeset.`;
+      : `You are an award-winning children's book author and independent publisher. Write clean, publication-ready page-by-page story text for "${params.productTitle}" (${params.category}).
+Format EVERY page clearly like this so each page pairs 1-to-1 with its illustration:
+Page 1:
+[1 to 3 vivid, rhythmic read-aloud sentences describing a clear visual moment]
+Visual Note: [Specific setting, lighting, props, secondary characters, and exact character action/pose that the illustrator must draw]
+
+Page 2:
+...
+Keep every page concrete, visual, and distinct so each illustration naturally matches its exact story text.`;
 
   if (params.provider === 'openrouter') {
     return callOpenRouterText(
@@ -371,6 +379,8 @@ export async function generateOpenRouterRasterImage(params: {
   sceneIndex?: number;
   totalScenes?: number;
   isCover?: boolean;
+  storyText?: string;
+  visualNote?: string;
 }): Promise<GeneratedImageOutput> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
@@ -392,24 +402,43 @@ export async function generateOpenRouterRasterImage(params: {
         ? 'Hero Front Cover composition: iconic centered storybook framing with clean open sky/soft background in the upper third for typography.'
         : 'Fresh dynamic storybook scene framing with rich environmental storytelling.';
 
+  const cleanStory = (params.storyText ?? '').trim();
+  const cleanVisual = (params.visualNote ?? '').trim();
+  const storyGroundingBlock = cleanStory
+    ? `EXACT STORY TEXT PRINTED ON THIS PAGE (YOUR ILLUSTRATION MUST FAITHFULLY DEPICT THIS EXACT MOMENT):
+"${cleanStory}"${cleanVisual ? `\nAuthor Visual Direction: ${cleanVisual}` : ''}
+`
+    : cleanVisual
+      ? `Author Visual Direction: ${cleanVisual}\n`
+      : '';
+
   const instructionText = hasReference
     ? `Create a high-resolution, publication-ready illustration for the book/product "${params.productTitle}" using the uploaded photo strictly as a CHARACTER IDENTITY REFERENCE.
-Style Direction: ${params.stylePreset}
+${storyGroundingBlock}Style Direction: ${params.stylePreset}
 Scene & Action Prompt: ${params.prompt}
 Camera & Page Framing: ${variationLine}
 
-Critical Multi-Page Consistency & Variety Rules:
-1. CHARACTER LIKENESS: Faithfully preserve the exact recognizable identity of the subject from the uploaded photo (same face, fur/hair colors, distinctive markings, ear shape, proportions, and personality) transformed seamlessly into the requested illustration style.
-2. BRAND-NEW SCENE & POSE: Do NOT copy the original photo's background, lighting, or static pose. Place this same character into the completely new environment, active body pose, and camera angle described in the Scene Prompt and Camera Framing above so every book page feels distinct and alive.
-3. CLEAN PRINT ARTWORK: Leave subtle breathing room near the bottom or top margin for book text typesetting. Render ZERO embedded text, ZERO letters, ZERO speech bubbles, ZERO watermarks, and no distorted anatomy.`
+Critical Story-Matching & Multi-Page Consistency Rules:
+1. STORY ACCURACY IS #1: ${
+        cleanStory
+          ? 'The illustration MUST directly depict every concrete detail in the EXACT STORY TEXT above — the exact setting/location, time of day, weather, secondary animals/characters, specific objects/colors/props, and the hero’s exact action and facial expression. Never contradict the story text.'
+          : 'Faithfully depict every concrete setting, prop, action, and emotion described in the Scene Prompt above.'
+      }
+2. CHARACTER LIKENESS: Faithfully preserve the exact recognizable identity of the subject from the uploaded photo (same face, fur/hair colors, distinctive markings, ear shape, proportions, and personality) transformed seamlessly into the requested illustration style.
+3. BRAND-NEW SCENE & POSE: Do NOT copy the original photo's background, lighting, or static pose. Place this same character into the completely new environment, active body pose, and camera angle matching this exact page's story.
+4. ZERO EMBEDDED TEXT: Leave subtle breathing room near the bottom or top margin for book text typesetting. Render ZERO embedded text, ZERO words, ZERO letters, ZERO speech bubbles, ZERO watermarks, and no distorted anatomy.`
     : `Create a high-resolution, publication-ready illustration for the digital product "${params.productTitle}".
-Style Direction: ${params.stylePreset}
+${storyGroundingBlock}Style Direction: ${params.stylePreset}
 Scene Prompt: ${params.prompt}
 Camera & Page Framing: ${variationLine}
 
 Requirements:
-- Clean, polished framing suitable for a commercial illustrated book, coloring page, or printable wall art.
-- Render ZERO embedded text, ZERO words, ZERO letters, and ZERO watermarks inside the artwork (book typography is typeset cleanly separately).`;
+- ${
+        cleanStory
+          ? 'STORY ACCURACY IS #1: Faithfully depict every concrete detail mentioned in the EXACT STORY TEXT above (exact location, time of day, weather, secondary characters/animals, props/colors, and character action/emotion). Never contradict the story text.'
+          : 'Clean, polished framing suitable for a commercial illustrated book, coloring page, or printable wall art.'
+      }
+- Render ZERO embedded text, ZERO words, ZERO letters, ZERO speech bubbles, and ZERO watermarks inside the artwork (book typography is typeset cleanly separately).`;
 
   const userContent = hasReference
     ? [
@@ -510,6 +539,8 @@ export async function generateStorybookIllustration(params: {
   sceneIndex?: number;
   totalScenes?: number;
   isCover?: boolean;
+  storyText?: string;
+  visualNote?: string;
 }): Promise<GeneratedImageOutput> {
   if (params.provider === 'openrouter') {
     return generateOpenRouterRasterImage({
@@ -521,6 +552,8 @@ export async function generateStorybookIllustration(params: {
       sceneIndex: params.sceneIndex,
       totalScenes: params.totalScenes,
       isCover: params.isCover,
+      storyText: params.storyText,
+      visualNote: params.visualNote,
     });
   }
 
@@ -529,12 +562,19 @@ export async function generateStorybookIllustration(params: {
     typeof params.sceneIndex === 'number'
       ? buildSceneVariationDirective(params.sceneIndex, params.totalScenes)
       : 'Distinct illustrated book scene framing.';
+  const cleanStory = (params.storyText ?? '').trim();
+  const cleanVisual = (params.visualNote ?? '').trim();
+  const storyClause = cleanStory
+    ? `\nExact story text on this page (depict every concrete setting, character, prop, and action faithfully): "${cleanStory}"${
+        cleanVisual ? `\nVisual Note: ${cleanVisual}` : ''
+      }`
+    : '';
   const systemInstruction = `You are a master editorial book illustrator. Create a rich, layered, publication-grade SVG illustration with viewBox="0 0 800 800" for "${params.productTitle}".
 Style direction: ${params.stylePreset}.
-Framing: ${variationLine}
+Framing: ${variationLine}${storyClause}
 Rules:
 - Output ONLY valid standalone <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">...</svg> markup. No markdown fences, no commentary.
-- Use rich layered backgrounds, gradients (<defs><linearGradient>/<radialGradient>), organic curved paths, atmospheric lighting, foreground framing foliage/architecture, and a clear central storybook focal subject.
+- Use rich layered backgrounds, gradients (<defs><linearGradient>/<radialGradient>), organic curved paths, atmospheric lighting, foreground framing foliage/architecture, and a clear central storybook focal subject directly matching the story text.
 - Do NOT include <script>, <foreignObject>, external image links, or inline event handlers.
 - Do NOT include any text, letters, or watermarks.`;
 
@@ -543,7 +583,9 @@ Rules:
     params.referenceImageDataUrl && params.referenceImageDataUrl.startsWith('data:image/')
   );
 
-  let contents: unknown = `Illustrate this page scene (${variationLine}): ${params.prompt}`;
+  let contents: unknown = `Illustrate this page scene (${variationLine})${
+    cleanStory ? ` matching story text "${cleanStory}"` : ''
+  }: ${params.prompt}`;
   if (hasReference) {
     const match = params.referenceImageDataUrl!.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (match) {
@@ -551,7 +593,9 @@ Rules:
         parts: [
           { inlineData: { mimeType: match[1], data: match[2] } },
           {
-            text: `Use the character/subject in this reference photo as the consistent hero, but place them in a brand-new dynamic pose and scene (${variationLine}): ${params.prompt}`,
+            text: `Use the character/subject in this reference photo as the consistent hero, but place them in a brand-new dynamic pose and scene (${variationLine})${
+              cleanStory ? ` faithfully depicting this exact page's story text: "${cleanStory}"` : ''
+            }. Scene prompt: ${params.prompt}`,
           },
         ],
       };

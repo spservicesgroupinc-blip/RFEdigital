@@ -125,10 +125,18 @@ export interface Series {
   createdAt: string;
 }
 
+export interface ParsedStorySpread {
+  pageNumber: number;
+  title: string;
+  storyText: string;
+  visualNote: string;
+}
+
 export interface InteriorPromptItem {
   id: string;
   title: string;
   prompt: string;
+  storyText?: string;
   generatedAssetId?: string | null;
 }
 
