@@ -1,0 +1,378 @@
+{
+  "settings": {
+    "studioName": "FolioPress",
+    "authorImprint": "Northwood Picture Press",
+    "connectedSpreadsheetId": "",
+    "connectedSpreadsheetUrl": "",
+    "connectedDriveRootId": "",
+    "openRouterConfigured": false,
+    "geminiConfigured": true
+  },
+  "series": [
+    {
+      "id": "ser-lantern-bear",
+      "name": "The Lantern Bear Chronicles",
+      "description": "Bedtime gouache picture books following Barnaby the young bear and his woodland neighbors across seasonal adventures.",
+      "targetAge": "Ages 4–7",
+      "marketplace": "Amazon KDP",
+      "createdAt": "2026-10-12T10:00:00.000Z"
+    },
+    {
+      "id": "ser-archival-botanicals",
+      "name": "Archival Field & Meadow Editions",
+      "description": "Botanical fine art prints and detailed cottage coloring books designed for print-on-demand and Etsy digital bundles.",
+      "targetAge": "All Ages",
+      "marketplace": "Etsy Digital",
+      "createdAt": "2026-10-20T14:15:00.000Z"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod-lantern-bear-1",
+      "seriesId": "ser-lantern-bear",
+      "title": "The Lantern Bear and the Firefly Brook",
+      "subtitle": "Book 1 in The Lantern Bear Chronicles",
+      "category": "childrens-book",
+      "status": "ready-for-kdp",
+      "trimSize": "8.5x8.5",
+      "pageCount": 24,
+      "includeBleed": true,
+      "isbn": "979-8-8914-2011-4",
+      "coverAssetId": "asset-lantern-cover",
+      "driveFolderId": null,
+      "sheetsRowSyncedAt": null,
+      "manuscriptNotes": "Spread 1: When twilight brushed the tall pines blue, Barnaby lifted his little brass lantern.\nSpread 2: Down by the stepping stones, silver fireflies danced above paper boats.",
+      "createdAt": "2026-10-14T09:00:00.000Z",
+      "updatedAt": "2026-11-24T15:30:00.000Z"
+    },
+    {
+      "id": "prod-cloud-atelier",
+      "seriesId": "ser-lantern-bear",
+      "title": "The Cloud Ship of Swallow Ridge",
+      "subtitle": "Book 2 in The Lantern Bear Chronicles",
+      "category": "childrens-book",
+      "status": "in-production",
+      "trimSize": "8.5x8.5",
+      "pageCount": 28,
+      "includeBleed": true,
+      "isbn": "979-8-8914-2012-1",
+      "coverAssetId": "asset-cloud-cover",
+      "driveFolderId": null,
+      "sheetsRowSyncedAt": null,
+      "manuscriptNotes": "Spread 1: High above the orchard hills, the stitched canvas balloon caught the morning breeze.",
+      "createdAt": "2026-10-28T11:20:00.000Z",
+      "updatedAt": "2026-11-24T15:30:00.000Z"
+    },
+    {
+      "id": "prod-meadow-coloring",
+      "seriesId": "ser-archival-botanicals",
+      "title": "Enchanted Meadow Cottage Coloring Book",
+      "subtitle": "30 Single-Sided Botanical Line Art Plates",
+      "category": "coloring-book",
+      "status": "in-production",
+      "trimSize": "8.5x11",
+      "pageCount": 30,
+      "includeBleed": false,
+      "isbn": "979-8-8914-2044-2",
+      "coverAssetId": "asset-meadow-plate",
+      "driveFolderId": null,
+      "sheetsRowSyncedAt": null,
+      "manuscriptNotes": "Single-sided 8.5x11 plates with generous 0.625 in framing margins for markers and colored pencils.",
+      "createdAt": "2026-11-04T16:40:00.000Z",
+      "updatedAt": "2026-11-24T15:30:00.000Z"
+    },
+    {
+      "id": "prod-botanical-prints",
+      "seriesId": "ser-archival-botanicals",
+      "title": "Woodland Maidenhair Botanical Print Set",
+      "subtitle": "Archival 8×10 Gallery Wall Art Collection",
+      "category": "art-print",
+      "status": "published",
+      "trimSize": "8x10",
+      "pageCount": 12,
+      "includeBleed": false,
+      "isbn": "ETSY-BF-2026-01",
+      "coverAssetId": "asset-fern-print",
+      "driveFolderId": null,
+      "sheetsRowSyncedAt": null,
+      "manuscriptNotes": "Includes 300 DPI printable PDF portfolio and framed print care instruction card.",
+      "createdAt": "2026-11-09T13:10:00.000Z",
+      "updatedAt": "2026-11-24T15:30:00.000Z"
+    }
+  ],
+  "folders": [
+    {
+      "id": "fld-lantern-bear",
+      "productId": "prod-lantern-bear-1",
+      "name": "the-lantern-bear-and-the-firefly-brook",
+      "path": "/FolioPress/the-lantern-bear-and-the-firefly-brook",
+      "driveFolderId": null,
+      "createdAt": "2026-10-14T09:00:00.000Z"
+    },
+    {
+      "id": "fld-cloud-atelier",
+      "productId": "prod-cloud-atelier",
+      "name": "the-cloud-ship-of-swallow-ridge",
+      "path": "/FolioPress/the-cloud-ship-of-swallow-ridge",
+      "driveFolderId": null,
+      "createdAt": "2026-10-28T11:20:00.000Z"
+    },
+    {
+      "id": "fld-meadow-coloring",
+      "productId": "prod-meadow-coloring",
+      "name": "enchanted-meadow-cottage-coloring-book",
+      "path": "/FolioPress/enchanted-meadow-cottage-coloring-book",
+      "driveFolderId": null,
+      "createdAt": "2026-11-04T16:40:00.000Z"
+    },
+    {
+      "id": "fld-botanical-prints",
+      "productId": "prod-botanical-prints",
+      "name": "woodland-maidenhair-botanical-print-set",
+      "path": "/FolioPress/woodland-maidenhair-botanical-print-set",
+      "driveFolderId": null,
+      "createdAt": "2026-11-09T13:10:00.000Z"
+    }
+  ],
+  "assets": [
+    {
+      "id": "asset-lantern-cover",
+      "folderId": "fld-lantern-bear",
+      "productId": "prod-lantern-bear-1",
+      "name": "01-front-cover-lantern-bear.jpg",
+      "kind": "cover",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 412800,
+      "url": "/src/assets/images/cover_lantern_bear_1795604336162.jpg",
+      "caption": "When twilight brushed the tall pines blue, Barnaby lifted his warm brass lantern.",
+      "pageOrder": 1,
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-10-15T10:00:00.000Z"
+    },
+    {
+      "id": "asset-lantern-spread-1",
+      "folderId": "fld-lantern-bear",
+      "productId": "prod-lantern-bear-1",
+      "name": "02-spread-firefly-brook.jpg",
+      "kind": "illustration",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 486200,
+      "url": "/src/assets/images/spread_lantern_river_1795604338150.jpg",
+      "caption": "At the stepping-stone brook, silver fireflies guided paper boats beneath the crescent moon.",
+      "pageOrder": 2,
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-10-16T11:30:00.000Z"
+    },
+    {
+      "id": "asset-cloud-cover",
+      "folderId": "fld-cloud-atelier",
+      "productId": "prod-cloud-atelier",
+      "name": "01-cover-cloud-ship.jpg",
+      "kind": "cover",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 398400,
+      "url": "/src/assets/images/cover_cloud_atelier_1795604338375.jpg",
+      "caption": "High above Swallow Ridge, the wooden sky-boat sailed alongside folded paper swallows.",
+      "pageOrder": 1,
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-10-29T09:45:00.000Z"
+    },
+    {
+      "id": "asset-meadow-plate",
+      "folderId": "fld-meadow-coloring",
+      "productId": "prod-meadow-coloring",
+      "name": "01-plate-meadow-cottage.jpg",
+      "kind": "illustration",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 356900,
+      "url": "/src/assets/images/cover_meadow_coloring_1795604339662.jpg",
+      "caption": "Plate 01 — Thatched Meadow Cottage & Butterfly Archway",
+      "pageOrder": 1,
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-11-05T14:00:00.000Z"
+    },
+    {
+      "id": "asset-fern-print",
+      "folderId": "fld-botanical-prints",
+      "productId": "prod-botanical-prints",
+      "name": "01-print-maidenhair-fern.jpg",
+      "kind": "cover",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 329100,
+      "url": "/src/assets/images/print_botanical_fern_1795604340121.jpg",
+      "caption": "Plate I — Adiantum pedatum (Woodland Maidenhair Fern & Wild Chamomile)",
+      "pageOrder": 1,
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-11-10T10:15:00.000Z"
+    }
+  ],
+  "generations": [
+    {
+      "id": "gen-seed-1",
+      "productId": "prod-lantern-bear-1",
+      "mode": "kdp-metadata",
+      "provider": "gemini",
+      "model": "gemini-4-hydrogen",
+      "prompt": "Draft Amazon KDP back-cover blurb and BISAC categories for The Lantern Bear and the Firefly Brook.",
+      "outputText": "When twilight settles over Whispering Pine Valley, Barnaby the young bear sets off along the mossy brook with his glowing brass lantern. Alongside a clever red fox and a fleet of folded paper boats, Barnaby discovers that even the smallest light can guide a friend home.\n\nRecommended KDP Categories:\n• Juvenile Fiction / Bedtime & Dreams\n• Juvenile Fiction / Animals / Bears\n• Juvenile Fiction / Nature & the Natural World",
+      "createdAt": "2026-11-20T16:00:00.000Z"
+    }
+  ],
+  "plans": [
+    {
+      "id": "plan-lantern-book-2",
+      "productId": "prod-cloud-atelier",
+      "seriesId": "ser-lantern-bear",
+      "name": "Cloud Ship — Interior Spread Batch",
+      "templateId": "tpl-picture-book-24",
+      "trimSize": "8.5x8.5",
+      "steps": [
+        {
+          "id": "step-cs-1",
+          "order": 1,
+          "title": "Draft 6-Spread Story Arc & Read-Aloud Copy",
+          "stepType": "manuscript",
+          "prompt": "Write a soothing 6-spread children’s picture book text for \"The Cloud Ship of Swallow Ridge\" about an origami swallow guiding a wooden airship home before dusk.",
+          "queued": true
+        },
+        {
+          "id": "step-cs-2",
+          "order": 2,
+          "title": "Illustration — Sunlit Cumulus Harbor",
+          "stepType": "illustration",
+          "prompt": "Gouache storybook scene of a wooden cloud ship moored to a lighthouse tower on a misty mountain peak at golden hour.",
+          "queued": true
+        },
+        {
+          "id": "step-cs-3",
+          "order": 3,
+          "title": "Assemble KDP 8.5×8.5 Full-Bleed Proof PDF",
+          "stepType": "export",
+          "prompt": "Compile Cloud Ship assets into an 8.5×8.5 in full-bleed KDP proof PDF.",
+          "queued": true
+        }
+      ],
+      "createdAt": "2026-11-12T08:30:00.000Z",
+      "updatedAt": "2026-11-25T11:12:19.330Z"
+    }
+  ],
+  "jobs": [
+    {
+      "planId": "plan-lantern-book-2",
+      "productId": "prod-cloud-atelier",
+      "title": "The Cloud Ship of Swallow Ridge — Illustration — Sunlit Cumulus Harbor",
+      "stepType": "illustration",
+      "prompt": "Gouache storybook scene of a wooden cloud ship moored to a lighthouse tower on a misty mountain peak at golden hour.",
+      "provider": "gemini",
+      "status": "queued",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "resultAssetId": null,
+      "resultSummary": null,
+      "errorMessage": null,
+      "id": "job-917d5ad4",
+      "createdAt": "2026-11-25T11:12:19.330Z",
+      "updatedAt": "2026-11-25T11:12:19.330Z"
+    },
+    {
+      "planId": "plan-lantern-book-2",
+      "productId": "prod-cloud-atelier",
+      "title": "The Cloud Ship of Swallow Ridge — Assemble KDP 8.5×8.5 Full-Bleed Proof PDF",
+      "stepType": "export",
+      "prompt": "Compile Cloud Ship assets into an 8.5×8.5 in full-bleed KDP proof PDF.",
+      "provider": "gemini",
+      "status": "queued",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "resultAssetId": null,
+      "resultSummary": null,
+      "errorMessage": null,
+      "id": "job-d12d18aa",
+      "createdAt": "2026-11-25T11:12:19.331Z",
+      "updatedAt": "2026-11-25T11:12:19.330Z"
+    },
+    {
+      "id": "job-seed-1",
+      "planId": "plan-lantern-book-2",
+      "productId": "prod-cloud-atelier",
+      "title": "The Cloud Ship of Swallow Ridge — Draft 6-Spread Story Arc",
+      "stepType": "manuscript",
+      "prompt": "Write a soothing 6-spread children’s picture book text for \"The Cloud Ship of Swallow Ridge\" about an origami swallow guiding a wooden airship home before dusk.",
+      "provider": "gemini",
+      "status": "completed",
+      "attempts": 1,
+      "maxAttempts": 3,
+      "resultAssetId": null,
+      "resultSummary": "Generated 6 rhythmic story spreads (412 words) saved to product manuscript notes.",
+      "errorMessage": null,
+      "createdAt": "2026-11-23T09:10:00.000Z",
+      "updatedAt": "2026-11-23T09:10:18.000Z"
+    },
+    {
+      "id": "job-seed-2",
+      "planId": null,
+      "productId": "prod-meadow-coloring",
+      "title": "Enchanted Meadow Cottage — KDP Listing Keywords & Back Cover Copy",
+      "stepType": "manuscript",
+      "prompt": "Write Amazon KDP back-cover copy and 7 backend keyword phrases for Enchanted Meadow Cottage Coloring Book (8.5x11 single-sided botanical line art).",
+      "provider": "gemini",
+      "status": "queued",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "resultAssetId": null,
+      "resultSummary": null,
+      "errorMessage": null,
+      "createdAt": "2026-11-24T14:20:00.000Z",
+      "updatedAt": "2026-11-24T14:20:00.000Z"
+    },
+    {
+      "id": "job-seed-3",
+      "planId": null,
+      "productId": "prod-lantern-bear-1",
+      "title": "The Lantern Bear — KDP Print Proof Assembly",
+      "stepType": "export",
+      "prompt": "Assemble 8.5×8.5 in full-bleed KDP interior PDF from ordered assets.",
+      "provider": "gemini",
+      "status": "queued",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "resultAssetId": null,
+      "resultSummary": null,
+      "errorMessage": null,
+      "createdAt": "2026-11-24T14:25:00.000Z",
+      "updatedAt": "2026-11-24T14:25:00.000Z"
+    }
+  ],
+  "exports": [
+    {
+      "id": "exp-95b9833e",
+      "productId": "prod-lantern-bear-1",
+      "format": "pdf",
+      "fileName": "the-lantern-bear-and-the-firefly-brook-8.5x8.5-15afa6.pdf",
+      "trimSize": "8.5x8.5",
+      "includeBleed": true,
+      "pageCount": 3,
+      "sizeBytes": 2172850,
+      "downloadUrl": "/api/export/download/the-lantern-bear-and-the-firefly-brook-8.5x8.5-15afa6.pdf",
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-11-25T11:12:18.704Z"
+    }
+  ],
+  "tokens": [
+    {
+      "id": "tok-seed-apps-script",
+      "name": "Google Apps Script Job Poller",
+      "prefix": "fp_live_8c4e...",
+      "scope": "apps-script-trigger",
+      "tokenHash": "4283a0a7c1122f4de63d49c22b3b1e12b80841bef2dcb8beaacdd01dd926d2ee",
+      "createdAt": "2026-11-18T12:00:00.000Z",
+      "lastUsedAt": "2026-11-24T15:00:00.000Z"
+    }
+  ]
+}
