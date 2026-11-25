@@ -7,6 +7,13 @@ import type {
 } from '../src/types/workspace.js';
 import { buildSceneVariationDirective } from '../src/lib/workspaceLogic.js';
 
+/** Resolve the default AI provider from configured API keys. */
+export function resolveDefaultProvider(): GenerationProvider {
+  if (process.env.OPENROUTER_API_KEY?.trim()) return 'openrouter';
+  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini';
+  return 'gemini';
+}
+
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {

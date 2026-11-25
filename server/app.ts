@@ -16,6 +16,7 @@ import {
   generatePublishingText,
   generateSeriesPlanSteps,
   generateStorybookIllustration,
+  resolveDefaultProvider,
 } from './aiGenerator.js';
 import {
   runLiveTrendDeepDive,
@@ -527,9 +528,7 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
       const effectiveProvider: GenerationProvider =
         job.provider === 'openrouter'
           ? 'openrouter'
-          : process.env.OPENROUTER_API_KEY?.trim()
-            ? 'openrouter'
-            : 'gemini';
+          : resolveDefaultProvider();
 
       const existingIllustrations = raw.assets.filter(
         (a) => a.productId === product.id && a.kind !== 'reference'
@@ -1434,9 +1433,7 @@ export function createApiApp(): express.Express {
           ? 'openrouter'
           : provider === 'gemini'
             ? 'gemini'
-            : process.env.OPENROUTER_API_KEY?.trim()
-              ? 'openrouter'
-              : 'gemini';
+            : resolveDefaultProvider();
 
       const isCover = kind === 'cover';
       const existingInteriorCount = raw.assets.filter(
@@ -1521,9 +1518,7 @@ export function createApiApp(): express.Express {
         ? 'openrouter'
         : provider === 'gemini'
           ? 'gemini'
-          : process.env.OPENROUTER_API_KEY?.trim()
-            ? 'openrouter'
-            : 'gemini';
+          : resolveDefaultProvider();
 
     const stylePreset =
       product.promptPack?.artStylePreset?.trim() ||
@@ -1743,9 +1738,7 @@ export function createApiApp(): express.Express {
         ? 'openrouter'
         : body.provider === 'gemini'
           ? 'gemini'
-          : process.env.OPENROUTER_API_KEY?.trim()
-            ? 'openrouter'
-            : 'gemini';
+          : resolveDefaultProvider();
 
     try {
       if (mode === 'scan') {
@@ -2073,9 +2066,7 @@ export function createApiApp(): express.Express {
         ? 'openrouter'
         : req.body?.provider === 'gemini'
           ? 'gemini'
-          : process.env.OPENROUTER_API_KEY?.trim()
-            ? 'openrouter'
-            : 'gemini';
+          : resolveDefaultProvider();
 
     const payloads = expandPlanToJobs(plan, product?.title || 'Untitled', provider);
     if (payloads.length === 0) {
