@@ -170,6 +170,8 @@ export interface WorkspaceSettings {
   connectedDriveRootId: string;
   openRouterConfigured: boolean;
   geminiConfigured: boolean;
+  appsScriptConfigured: boolean;
+  appsScriptLastSyncAt: string | null;
 }
 
 export interface WorkspaceSnapshot {

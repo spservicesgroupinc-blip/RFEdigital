@@ -2,5 +2,7 @@
   "name": "FolioPress",
   "description": "Digital Product Workspace for generating, organizing, batch-planning, and exporting KDP children's books and printable art bundles with Google Drive and Google Sheets integration.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

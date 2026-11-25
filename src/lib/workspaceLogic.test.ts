@@ -9,6 +9,7 @@ import {
   getNextRunnableJob,
   sanitizeFolderSlug,
   transitionJobStatus,
+  validateAppsScriptWebAppUrl,
   validateProductInput,
   validateTokenName,
 } from './workspaceLogic';
@@ -188,6 +189,21 @@ test('formatBytes and generateAppsScriptBridge format clean outputs', () => {
   assert.equal(formatBytes(512), '512 B');
   assert.equal(formatBytes(2048), '2.0 KB');
   const script = generateAppsScriptBridge('sheet_123', 'https://folio.example.com/');
-  assert.ok(script.includes("SPREADSHEET_ID: 'sheet_123'"));
-  assert.ok(script.includes("WORKSPACE_API: 'https://folio.example.com'"));
+  assert.ok(script.includes('sheet_123'));
+  assert.ok(script.includes('https://folio.example.com'));
+});
+
+test('validateAppsScriptWebAppUrl allows only HTTPS script.google.com macro URLs', () => {
+  assert.equal(
+    validateAppsScriptWebAppUrl('https://script.google.com/macros/s/AKfycb12345/exec').valid,
+    true
+  );
+  assert.equal(validateAppsScriptWebAppUrl('').valid, false);
+  assert.equal(
+    validateAppsScriptWebAppUrl('http://script.google.com/macros/s/AKfycb12345/exec').valid,
+    false
+  );
+  assert.equal(validateAppsScriptWebAppUrl('https://169.254.169.254/latest/meta-data').valid, false);
+  assert.equal(validateAppsScriptWebAppUrl('https://evil.example.com/macros/s/abc/exec').valid, false);
+  assert.equal(validateAppsScriptWebAppUrl('https://script.google.com/home').valid, false);
 });

@@ -17,6 +17,11 @@ import {
 } from './server/aiGenerator';
 import { buildAssetBundleZip, buildKdpPdfBuffer } from './server/pdfExport';
 import {
+  callAppsScriptHealth,
+  callAppsScriptPost,
+  readCodeGsSource,
+} from './server/appsScriptBridge';
+import {
   expandPlanToJobs,
   getNextRunnableJob,
   sanitizeFolderSlug,
@@ -752,6 +757,16 @@ async function startServer() {
   });
 
   app.post('/api/jobs/run-next', async (req, res) => {
+    // External Apps Script triggers send X-Apps-Script or Authorization: Bearer fp_live_...
+    const hasAppsScriptHeader = Boolean(req.headers['x-apps-script']);
+    const authHeader = req.headers.authorization;
+    if (hasAppsScriptHeader || (authHeader && authHeader.startsWith('Bearer '))) {
+      const token = requireBearerToken(req);
+      if (!token || !workspaceStore.verifyApiToken(token)) {
+        return res.status(401).json({ error: 'Unauthorized: invalid or revoked Workspace API token.' });
+      }
+    }
+
     const raw = workspaceStore.getRaw();
     const requestedId = typeof req.body?.jobId === 'string' ? req.body.jobId : null;
     const job = requestedId
@@ -922,6 +937,106 @@ async function startServer() {
       res.sendFile(safePath);
     } catch {
       res.status(400).json({ error: 'Invalid export filename.' });
+    }
+  });
+
+  // --- Google Apps Script Web App Bridge (Server-Side APPS_SCRIPT_WEBAPP_URL Secret) ---
+  app.get('/api/bridge/code-gs', (_req, res) => {
+    try {
+      const source = readCodeGsSource();
+      res.json({ filename: 'code.gs', source });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Unable to read code.gs.',
+      });
+    }
+  });
+
+  app.get('/api/bridge/status', async (_req, res) => {
+    try {
+      const health = await callAppsScriptHealth();
+      const raw = workspaceStore.getRaw();
+      if (health.setup?.spreadsheetId) {
+        raw.settings.connectedSpreadsheetId = health.setup.spreadsheetId;
+      }
+      if (health.setup?.spreadsheetUrl) {
+        raw.settings.connectedSpreadsheetUrl = health.setup.spreadsheetUrl;
+      }
+      if (health.setup?.driveRootId) {
+        raw.settings.connectedDriveRootId = health.setup.driveRootId;
+      }
+      workspaceStore.save();
+      res.json(health);
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Apps Script health check failed.',
+      });
+    }
+  });
+
+  app.post('/api/bridge/setup', async (_req, res) => {
+    try {
+      const appUrl = process.env.APP_URL?.trim() || '';
+      const setup = await callAppsScriptPost<{
+        ok: boolean;
+        spreadsheetId?: string;
+        spreadsheetUrl?: string;
+        driveRootId?: string;
+        driveRootUrl?: string;
+        triggerInstalled?: boolean;
+        initializedAt?: string;
+      }>('setup', appUrl ? { appUrl } : {});
+
+      const raw = workspaceStore.getRaw();
+      if (setup.spreadsheetId) raw.settings.connectedSpreadsheetId = setup.spreadsheetId;
+      if (setup.spreadsheetUrl) raw.settings.connectedSpreadsheetUrl = setup.spreadsheetUrl;
+      if (setup.driveRootId) raw.settings.connectedDriveRootId = setup.driveRootId;
+      workspaceStore.save();
+
+      res.json(setup);
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Apps Script first-run setup failed.',
+      });
+    }
+  });
+
+  app.post('/api/bridge/sync', async (_req, res) => {
+    try {
+      const raw = workspaceStore.getRaw();
+      const result = await callAppsScriptPost<{
+        ok: boolean;
+        syncedAt?: string;
+        setup?: {
+          spreadsheetId?: string;
+          spreadsheetUrl?: string;
+          driveRootId?: string;
+        };
+        rowsWritten?: Record<string, number>;
+      }>('sync', {
+        products: raw.products,
+        series: raw.series,
+        assets: raw.assets,
+        jobs: raw.jobs,
+      });
+
+      const syncedAt = result.syncedAt || new Date().toISOString();
+      raw.settings.appsScriptLastSyncAt = syncedAt;
+      if (result.setup?.spreadsheetId) raw.settings.connectedSpreadsheetId = result.setup.spreadsheetId;
+      if (result.setup?.spreadsheetUrl) raw.settings.connectedSpreadsheetUrl = result.setup.spreadsheetUrl;
+      if (result.setup?.driveRootId) raw.settings.connectedDriveRootId = result.setup.driveRootId;
+      raw.products = raw.products.map((p) => ({ ...p, sheetsRowSyncedAt: syncedAt }));
+      workspaceStore.save();
+
+      res.json({
+        syncedAt,
+        rowsWritten: result.rowsWritten ?? { products: raw.products.length, jobs: raw.jobs.length },
+        spreadsheetUrl: raw.settings.connectedSpreadsheetUrl,
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Apps Script sync failed.',
+      });
     }
   });
 

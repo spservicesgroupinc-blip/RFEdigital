@@ -236,6 +236,40 @@ export const workspaceApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(payload),
     }),
+
+  // Google Apps Script Web App Bridge (server reads APPS_SCRIPT_WEBAPP_URL from Secrets)
+  getCodeGs: () => requestJson<{ filename: string; source: string }>('/api/bridge/code-gs'),
+
+  getBridgeStatus: () =>
+    requestJson<{
+      ok: boolean;
+      setup?: {
+        spreadsheetId?: string;
+        spreadsheetUrl?: string;
+        driveRootId?: string;
+        driveRootUrl?: string;
+        initializedAt?: string;
+        triggerInstalled?: boolean;
+      };
+      counts?: { products: number; series: number; assets: number; jobs: number };
+    }>('/api/bridge/status'),
+
+  runBridgeSetup: () =>
+    requestJson<{
+      ok: boolean;
+      spreadsheetId?: string;
+      spreadsheetUrl?: string;
+      driveRootId?: string;
+      driveRootUrl?: string;
+      triggerInstalled?: boolean;
+    }>('/api/bridge/setup', { method: 'POST', body: JSON.stringify({}) }),
+
+  syncViaBridge: () =>
+    requestJson<{
+      syncedAt: string;
+      rowsWritten: Record<string, number>;
+      spreadsheetUrl?: string;
+    }>('/api/bridge/sync', { method: 'POST', body: JSON.stringify({}) }),
 };
 
 /**

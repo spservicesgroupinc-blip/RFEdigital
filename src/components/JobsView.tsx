@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Code2,
   Copy,
+  Download,
   Pause,
   Play,
   RefreshCw,
@@ -10,7 +11,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { JobItem, JobStatus, Product, WorkspaceSettings } from '../types/workspace';
-import { generateAppsScriptBridge, type JobAction } from '../lib/workspaceLogic';
+import { type JobAction } from '../lib/workspaceLogic';
+import { workspaceApi } from '../lib/api';
 
 interface JobsViewProps {
   jobs: JobItem[];
@@ -54,21 +56,40 @@ export function JobsView({
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all');
   const [showScriptPanel, setShowScriptPanel] = useState(false);
   const [copiedScript, setCopiedScript] = useState(false);
+  const [codeGsSource, setCodeGsSource] = useState<string>('');
+  const [loadingScript, setLoadingScript] = useState(false);
 
   const filtered = jobs.filter((j) => statusFilter === 'all' || j.status === statusFilter);
   const queuedCount = jobs.filter((j) => j.status === 'queued').length;
   const completedCount = jobs.filter((j) => j.status === 'completed').length;
   const failedCount = jobs.filter((j) => j.status === 'failed').length;
 
-  const appsScriptCode = generateAppsScriptBridge(
-    settings.connectedSpreadsheetId,
-    typeof window !== 'undefined' ? window.location.origin : ''
-  );
+  useEffect(() => {
+    if (!showScriptPanel || codeGsSource) return;
+    setLoadingScript(true);
+    workspaceApi
+      .getCodeGs()
+      .then((res) => setCodeGsSource(res.source))
+      .catch(() => setCodeGsSource('// Unable to load /code.gs from server.'))
+      .finally(() => setLoadingScript(false));
+  }, [showScriptPanel, codeGsSource]);
 
   const copyScript = () => {
-    navigator.clipboard?.writeText(appsScriptCode).catch(() => {});
+    if (!codeGsSource) return;
+    navigator.clipboard?.writeText(codeGsSource).catch(() => {});
     setCopiedScript(true);
     setTimeout(() => setCopiedScript(false), 1800);
+  };
+
+  const downloadScript = () => {
+    if (!codeGsSource) return;
+    const blob = new Blob([codeGsSource], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'code.gs';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -171,30 +192,45 @@ export function JobsView({
         </div>
       </div>
 
-      {/* Collapsible Google Apps Script Trigger Code Panel */}
+      {/* Collapsible Google Apps Script code.gs Panel */}
       {showScriptPanel && (
         <section className="rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">
-                Google Apps Script Time-Driven Trigger (Code.gs)
+                Google Apps Script First-Run Bridge (code.gs)
               </h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Polls your Google Sheets <span className="font-mono">Jobs</span> tab and executes
-                one queued generation or export step per trigger tick.
+                Copy into Apps Script, run <span className="font-mono">setupWorkspace()</span> once, deploy as a Web App, and save the URL as{' '}
+                <span className="font-mono">APPS_SCRIPT_WEBAPP_URL</span> in Settings &gt; Secrets.
+                {settings.appsScriptConfigured
+                  ? ' (APPS_SCRIPT_WEBAPP_URL detected on server.)'
+                  : ''}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={copyScript}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
-            >
-              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-              {copiedScript ? 'Copied Code.gs' : 'Copy Script'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadScript}
+                disabled={!codeGsSource}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Download code.gs
+              </button>
+              <button
+                type="button"
+                onClick={copyScript}
+                disabled={!codeGsSource}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap shrink-0"
+              >
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                {copiedScript ? 'Copied code.gs' : 'Copy code.gs'}
+              </button>
+            </div>
           </div>
-          <pre className="mt-3 max-h-72 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-100">
-            <code>{appsScriptCode}</code>
+          <pre className="mt-3 max-h-80 overflow-auto rounded-md border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-100">
+            <code>{loadingScript ? 'Loading code.gs…' : codeGsSource}</code>
           </pre>
         </section>
       )}

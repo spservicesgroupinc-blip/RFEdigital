@@ -316,62 +316,55 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
 ];
 
 /**
+ * Validates that a configured Google Apps Script Web App URL uses HTTPS
+ * and strictly points to Google's Apps Script macro hostnames (SSRF defense).
+ */
+export function validateAppsScriptWebAppUrl(
+  urlString: string
+): { valid: boolean; error?: string } {
+  const trimmed = urlString.trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      error:
+        'APPS_SCRIPT_WEBAPP_URL is not configured. Deploy code.gs as a Web App and paste the URL into Settings > Secrets.',
+    };
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:') {
+      return { valid: false, error: 'Apps Script Web App URL must use HTTPS.' };
+    }
+    const allowedHosts = new Set(['script.google.com', 'script.googleusercontent.com']);
+    if (!allowedHosts.has(parsed.hostname)) {
+      return {
+        valid: false,
+        error: 'Apps Script Web App URL must be hosted on script.google.com.',
+      };
+    }
+    if (!parsed.pathname.includes('/macros/')) {
+      return {
+        valid: false,
+        error: 'Apps Script Web App URL must point to a /macros/s/.../exec deployment.',
+      };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'APPS_SCRIPT_WEBAPP_URL is not a valid URL.' };
+  }
+}
+
+/**
  * Generates a clean Google Apps Script (Code.gs) bridge for time-driven job queue execution
  * and Google Sheets library persistence.
  */
 export function generateAppsScriptBridge(spreadsheetId: string, workspaceUrl: string): string {
-  const safeSheetId = spreadsheetId.trim() || 'YOUR_SPREADSHEET_ID';
+  const safeSheetId = spreadsheetId.trim() || 'AUTO_CREATED_ON_FIRST_RUN';
   const safeUrl = workspaceUrl.trim().replace(/\/+$/, '') || 'https://your-workspace-domain.com';
 
-  return `/**
- * FolioPress — Google Apps Script Library & Job Queue Bridge
- * Attach to your Library Spreadsheet and add a 5-minute time-driven trigger on runNextJobTick().
- */
-
-const CONFIG = {
-  SPREADSHEET_ID: '${safeSheetId}',
-  WORKSPACE_API: '${safeUrl}',
-  // Store your FolioPress API token under Project Settings > Script Properties as FOLIOPRESS_TOKEN
-};
-
-function getSheet_(name) {
-  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-  return ss.getSheetByName(name) || ss.insertSheet(name);
-}
-
-/**
- * Time-driven trigger: reads the next queued row in Jobs and calls the workspace worker endpoint.
- */
-function runNextJobTick() {
-  const token = PropertiesService.getScriptProperties().getProperty('FOLIOPRESS_TOKEN');
-  if (!token) throw new Error('Missing FOLIOPRESS_TOKEN in Script Properties.');
-
-  const jobsSheet = getSheet_('Jobs');
-  const rows = jobsSheet.getDataRange().getValues();
-  if (rows.length < 2) return;
-
-  const headers = rows[0];
-  const statusCol = headers.indexOf('status');
-  const idCol = headers.indexOf('id');
-
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][statusCol] === 'queued') {
-      const jobId = rows[i][idCol];
-      jobsSheet.getRange(i + 1, statusCol + 1).setValue('running');
-
-      const res = UrlFetchApp.fetch(CONFIG.WORKSPACE_API + '/api/jobs/run-next', {
-        method: 'post',
-        contentType: 'application/json',
-        headers: { Authorization: 'Bearer ' + token },
-        payload: JSON.stringify({ jobId }),
-        muteHttpExceptions: true,
-      });
-
-      const ok = res.getResponseCode() >= 200 && res.getResponseCode() < 300;
-      jobsSheet.getRange(i + 1, statusCol + 1).setValue(ok ? 'completed' : 'failed');
-      break; // Process exactly one step per trigger tick
-    }
-  }
-}
-`;
+  return `// Full copy-and-paste script lives in /code.gs at the project root.
+// Connected Spreadsheet ID: ${safeSheetId}
+// Workspace Callback URL: ${safeUrl}
+// Run setupWorkspace() once in Apps Script, deploy as a Web App,
+// and save the Web App URL as APPS_SCRIPT_WEBAPP_URL in Settings > Secrets.`;
 }

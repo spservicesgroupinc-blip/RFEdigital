@@ -14,6 +14,7 @@ import type {
   WorkspaceSnapshot,
 } from '../src/types/workspace';
 import { sanitizeFolderSlug } from '../src/lib/workspaceLogic';
+import { isAppsScriptConfigured } from './appsScriptBridge';
 
 const ROOT_DIR = process.cwd();
 export const DATA_DIR = path.resolve(ROOT_DIR, '.data');
@@ -395,6 +396,8 @@ function buildSeedWorkspace(): PersistedWorkspace {
       connectedDriveRootId: '',
       openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
       geminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+      appsScriptConfigured: isAppsScriptConfigured(),
+      appsScriptLastSyncAt: null,
     },
     series,
     products,
@@ -424,6 +427,10 @@ class WorkspaceStore {
         if (parsed && Array.isArray(parsed.products) && Array.isArray(parsed.jobs)) {
           parsed.settings.openRouterConfigured = Boolean(process.env.OPENROUTER_API_KEY?.trim());
           parsed.settings.geminiConfigured = Boolean(process.env.GEMINI_API_KEY?.trim());
+          parsed.settings.appsScriptConfigured = isAppsScriptConfigured();
+          if (parsed.settings.appsScriptLastSyncAt === undefined) {
+            parsed.settings.appsScriptLastSyncAt = null;
+          }
           return parsed;
         }
       }
@@ -448,6 +455,7 @@ class WorkspaceStore {
         ...this.state.settings,
         openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
         geminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+        appsScriptConfigured: isAppsScriptConfigured(),
       },
       tokens: this.state.tokens.map(({ tokenHash: _hash, ...rest }) => rest),
     };

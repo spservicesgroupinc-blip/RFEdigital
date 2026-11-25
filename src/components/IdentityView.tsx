@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Copy, ExternalLink, KeyRound, LogOut, Trash2 } from 'lucide-react';
+import { Code2, Copy, Download, ExternalLink, KeyRound, LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type { ApiTokenRecord, WorkspaceSettings } from '../types/workspace';
 import { validateTokenName } from '../lib/workspaceLogic';
+import { workspaceApi } from '../lib/api';
 import { GoogleSignInButton } from './GoogleSignInButton';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -21,6 +22,8 @@ interface IdentityViewProps {
   onRevokeToken: (id: string) => Promise<void>;
   onUpdateSettings: (payload: Partial<WorkspaceSettings>) => Promise<void>;
   onBootstrapGoogleSheet: () => Promise<void>;
+  onRunBridgeSetup: () => Promise<void>;
+  onSyncViaBridge: () => Promise<void>;
 }
 
 const CAPABILITY_MAP = [
@@ -45,6 +48,8 @@ export function IdentityView({
   onRevokeToken,
   onUpdateSettings,
   onBootstrapGoogleSheet,
+  onRunBridgeSetup,
+  onSyncViaBridge,
 }: IdentityViewProps) {
   const [tokenName, setTokenName] = useState('');
   const [tokenScope, setTokenScope] = useState<ApiTokenRecord['scope']>('apps-script-trigger');
@@ -60,6 +65,47 @@ export function IdentityView({
 
   const [confirmBootstrap, setConfirmBootstrap] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
+
+  const [copiedCodeGs, setCopiedCodeGs] = useState(false);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [confirmBridgeSync, setConfirmBridgeSync] = useState(false);
+
+  const handleCopyCodeGs = async () => {
+    const res = await workspaceApi.getCodeGs();
+    navigator.clipboard?.writeText(res.source).catch(() => {});
+    setCopiedCodeGs(true);
+    setTimeout(() => setCopiedCodeGs(false), 1800);
+  };
+
+  const handleDownloadCodeGs = async () => {
+    const res = await workspaceApi.getCodeGs();
+    const blob = new Blob([res.source], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'code.gs';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRunBridgeSetup = async () => {
+    setBridgeBusy(true);
+    try {
+      await onRunBridgeSetup();
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
+  const handleConfirmBridgeSync = async () => {
+    setBridgeBusy(true);
+    try {
+      await onSyncViaBridge();
+      setConfirmBridgeSync(false);
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,6 +376,81 @@ export function IdentityView({
         </section>
       </div>
 
+      {/* Google Apps Script Web App Bridge (code.gs + Settings > Secrets) */}
+      <section className="rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              Google Apps Script Bridge (code.gs)
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600">
+              Copy <span className="font-mono text-slate-800">/code.gs</span> into Google Apps Script and run{' '}
+              <span className="font-mono text-slate-800">setupWorkspace()</span> once to automatically create your Google Drive workspace folders, formatted Library Spreadsheet tabs, and 5-minute background job trigger. Deploy it as a Web App and save the deployment URL as{' '}
+              <span className="font-mono text-slate-800">APPS_SCRIPT_WEBAPP_URL</span> in{' '}
+              <span className="font-semibold text-slate-800">Settings &gt; Secrets</span>.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className={`font-medium ${
+                  settings.appsScriptConfigured ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                {settings.appsScriptConfigured
+                  ? 'APPS_SCRIPT_WEBAPP_URL configured in Secrets'
+                  : 'APPS_SCRIPT_WEBAPP_URL not set in Settings > Secrets yet'}
+              </span>
+              {settings.appsScriptLastSyncAt && (
+                <>
+                  <span className="text-slate-300" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="font-mono text-slate-500 tabular-nums">
+                    Last synced {new Date(settings.appsScriptLastSyncAt).toLocaleString()}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyCodeGs}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+            >
+              <Copy className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+              {copiedCodeGs ? 'Copied code.gs' : 'Copy code.gs'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadCodeGs}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap shrink-0"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+              Download code.gs
+            </button>
+            <button
+              type="button"
+              disabled={!settings.appsScriptConfigured || bridgeBusy}
+              onClick={handleRunBridgeSetup}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-45 whitespace-nowrap shrink-0"
+            >
+              <Code2 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+              {bridgeBusy ? 'Running…' : 'Run First-Time Setup'}
+            </button>
+            <button
+              type="button"
+              disabled={!settings.appsScriptConfigured || bridgeBusy}
+              onClick={() => setConfirmBridgeSync(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white hover:bg-blue-800 disabled:opacity-45 whitespace-nowrap shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Sync via Apps Script
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Capability Map Architecture Reference Table */}
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-6 py-4">
@@ -373,6 +494,17 @@ export function IdentityView({
         busy={bootstrapping}
         onConfirm={handleBootstrap}
         onCancel={() => setConfirmBootstrap(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmBridgeSync}
+        title="Sync Workspace tables via Google Apps Script?"
+        description="This will write your Products, Series, Assets, and Jobs tables into the Google Spreadsheet managed by your deployed Apps Script Web App."
+        confirmLabel="Sync via Apps Script"
+        tone="primary"
+        busy={bridgeBusy}
+        onConfirm={handleConfirmBridgeSync}
+        onCancel={() => setConfirmBridgeSync(false)}
       />
     </div>
   );

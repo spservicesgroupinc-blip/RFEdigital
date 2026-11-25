@@ -605,6 +605,36 @@ export default function App() {
                   onSignInGoogle={handleGoogleSignIn}
                   onSignOutGoogle={handleGoogleSignOut}
                   onBootstrapGoogleSheet={handleBootstrapGoogleSheet}
+                  onRunBridgeSetup={async () => {
+                    try {
+                      const res = await workspaceApi.runBridgeSetup();
+                      await refreshWorkspace();
+                      showNotice(
+                        res.spreadsheetId
+                          ? `Apps Script initialized Spreadsheet (${res.spreadsheetId.slice(0, 10)}…) and 5-min trigger.`
+                          : 'Apps Script first-run setup completed.'
+                      );
+                    } catch (err) {
+                      showNotice(
+                        err instanceof Error ? err.message : 'Apps Script setup failed.',
+                        'error'
+                      );
+                    }
+                  }}
+                  onSyncViaBridge={async () => {
+                    try {
+                      const res = await workspaceApi.syncViaBridge();
+                      await refreshWorkspace();
+                      showNotice(
+                        `Synced ${res.rowsWritten.products ?? workspace.products.length} products via Apps Script Web App.`
+                      );
+                    } catch (err) {
+                      showNotice(
+                        err instanceof Error ? err.message : 'Apps Script sync failed.',
+                        'error'
+                      );
+                    }
+                  }}
                   onCreateToken={async (payload) => {
                     const res = await workspaceApi.createToken(payload);
                     await refreshWorkspace();
