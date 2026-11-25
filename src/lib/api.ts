@@ -64,8 +64,13 @@ export const workspaceApi = {
     seriesId: string | null;
     isbn: string;
     manuscriptNotes: string;
+    referencePhoto?: {
+      name: string;
+      mimeType: string;
+      dataUrl: string;
+    };
   }) =>
-    requestJson<{ product: Product }>('/api/library/products', {
+    requestJson<{ product: Product; referenceAsset?: StorageAsset | null }>('/api/library/products', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -120,13 +125,27 @@ export const workspaceApi = {
     stylePreset: string;
     provider: GenerationProvider;
     kind: StorageAsset['kind'];
+    openRouterModel?: string;
+    referenceImageDataUrl?: string;
+    referenceAssetId?: string;
+    saveReferenceToProduct?: boolean;
+    referenceFileName?: string;
   }) =>
-    requestJson<{ record: GenerationRecord; asset: StorageAsset }>('/api/generate/illustration', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    requestJson<{ record: GenerationRecord; asset: StorageAsset; product?: Product }>(
+      '/api/generate/illustration',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
 
-  generateOutline: (payload: { productId: string; brief: string; stepCount: number }) =>
+  generateOutline: (payload: {
+    productId?: string;
+    productTitle?: string;
+    category?: ProductCategory;
+    brief: string;
+    stepCount: number;
+  }) =>
     requestJson<{
       steps: Array<{ title: string; stepType: 'manuscript' | 'illustration' | 'export'; prompt: string }>;
       model: string;

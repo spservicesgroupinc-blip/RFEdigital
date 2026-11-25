@@ -192,12 +192,205 @@ export function sanitizeSvgMarkup(rawSvg: string): string {
   return svg;
 }
 
+export interface GeneratedImageOutput {
+  buffer: Buffer;
+  mimeType: string;
+  extension: '.png' | '.jpg' | '.webp' | '.svg';
+  caption: string;
+  model: string;
+}
+
+const MIME_TO_EXT: Record<string, '.png' | '.jpg' | '.webp'> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/webp': '.webp',
+};
+
+function extractImageUrlFromOpenRouterMessage(message: unknown): string | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+
+  // 1. Standard OpenRouter multimodal response: message.images = [{ type: 'image_url', image_url: { url } }]
+  if (Array.isArray(msg.images)) {
+    for (const item of msg.images) {
+      if (typeof item === 'string' && (item.startsWith('data:image/') || item.startsWith('https://'))) {
+        return item;
+      }
+      if (item && typeof item === 'object') {
+        const rec = item as Record<string, unknown>;
+        const nested = rec.image_url as Record<string, unknown> | undefined;
+        if (typeof nested?.url === 'string') return nested.url;
+        if (typeof rec.url === 'string') return rec.url;
+      }
+    }
+  }
+
+  // 2. Fallback: array content parts containing image_url
+  if (Array.isArray(msg.content)) {
+    for (const part of msg.content) {
+      if (part && typeof part === 'object') {
+        const rec = part as Record<string, unknown>;
+        const nested = rec.image_url as Record<string, unknown> | undefined;
+        if (typeof nested?.url === 'string') return nested.url;
+      }
+    }
+  }
+
+  // 3. Fallback: embedded data URI in string content
+  if (typeof msg.content === 'string') {
+    const match = msg.content.match(/data:image\/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+/i);
+    if (match) return match[0];
+  }
+
+  return null;
+}
+
+export async function generateOpenRouterRasterImage(params: {
+  prompt: string;
+  stylePreset: string;
+  productTitle: string;
+  referenceImageDataUrl?: string;
+  openRouterModel?: string;
+}): Promise<GeneratedImageOutput> {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      'OPENROUTER_API_KEY is not configured on the server. Add OPENROUTER_API_KEY in Settings > Secrets.'
+    );
+  }
+
+  const model = params.openRouterModel?.trim() || 'google/gemini-2.5-flash-image';
+
+  const hasReference = Boolean(
+    params.referenceImageDataUrl && params.referenceImageDataUrl.startsWith('data:image/')
+  );
+
+  const instructionText = hasReference
+    ? `Create a high-resolution, publication-ready illustration for the digital product "${params.productTitle}" based directly on the uploaded reference photo.
+Style Direction: ${params.stylePreset}
+Scene & Character Prompt: ${params.prompt}
+
+Requirements:
+- Faithfully preserve the recognizable likeness, markings, coloring, proportions, and charming personality of the subject in the reference photo while transforming it seamlessly into the requested illustration/cartoon style.
+- Clean, polished framing suitable for a commercial children's book, print, or cover.
+- No watermarks, no random text, no distorted anatomy.`
+    : `Create a high-resolution, publication-ready illustration for the digital product "${params.productTitle}".
+Style Direction: ${params.stylePreset}
+Scene Prompt: ${params.prompt}
+
+Requirements:
+- Clean, polished framing suitable for a commercial book, coloring page, or printable wall art.
+- No watermarks or random garbled text.`;
+
+  const userContent = hasReference
+    ? [
+        { type: 'image_url', image_url: { url: params.referenceImageDataUrl! } },
+        { type: 'text', text: instructionText },
+      ]
+    : instructionText;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 58_000);
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
+        'X-Title': 'FolioPress Digital Product Workspace',
+      },
+      body: JSON.stringify({
+        model,
+        modalities: ['image', 'text'],
+        messages: [
+          {
+            role: 'user',
+            content: userContent,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`OpenRouter image generation failed (${res.status}): ${errText.slice(0, 260)}`);
+    }
+
+    const data = (await res.json()) as {
+      model?: string;
+      choices?: Array<{ message?: Record<string, unknown> }>;
+    };
+
+    const message = data.choices?.[0]?.message;
+    const imageUrl = extractImageUrlFromOpenRouterMessage(message);
+
+    if (!imageUrl) {
+      throw new Error(
+        `OpenRouter model "${model}" returned text instead of an image. Choose an image-output model such as google/gemini-2.5-flash-image or openai/gpt-5-image-mini.`
+      );
+    }
+
+    let buffer: Buffer;
+    let mimeType = 'image/png';
+
+    if (imageUrl.startsWith('data:image/')) {
+      const match = imageUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!match) {
+        throw new Error('OpenRouter returned an invalid base64 image payload.');
+      }
+      mimeType = match[1].toLowerCase();
+      buffer = Buffer.from(match[2], 'base64');
+    } else if (imageUrl.startsWith('https://')) {
+      const imgRes = await fetch(imageUrl, { signal: controller.signal });
+      if (!imgRes.ok) {
+        throw new Error(`Could not download generated image (${imgRes.status}).`);
+      }
+      mimeType = (imgRes.headers.get('content-type') || 'image/png').split(';')[0].trim().toLowerCase();
+      buffer = Buffer.from(await imgRes.arrayBuffer());
+    } else {
+      throw new Error('Unsupported image format returned by OpenRouter.');
+    }
+
+    if (buffer.byteLength === 0) {
+      throw new Error('OpenRouter returned an empty image.');
+    }
+
+    const extension = MIME_TO_EXT[mimeType] ?? '.png';
+    return {
+      buffer,
+      mimeType: extension === '.jpg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : 'image/png',
+      extension,
+      caption: params.prompt.slice(0, 180),
+      model: data.model || model,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function generateStorybookIllustration(params: {
   prompt: string;
   stylePreset: string;
   provider: GenerationProvider;
   productTitle: string;
-}): Promise<{ svgMarkup: string; caption: string; model: string }> {
+  referenceImageDataUrl?: string;
+  openRouterModel?: string;
+}): Promise<GeneratedImageOutput> {
+  if (params.provider === 'openrouter') {
+    return generateOpenRouterRasterImage({
+      prompt: params.prompt,
+      stylePreset: params.stylePreset,
+      productTitle: params.productTitle,
+      referenceImageDataUrl: params.referenceImageDataUrl,
+      openRouterModel: params.openRouterModel,
+    });
+  }
+
+  // Gemini vector fallback when user explicitly selects Gemini 4 Hydrogen (free text/SVG route)
   const systemInstruction = `You are a master editorial book illustrator. Create a rich, layered, publication-grade SVG illustration with viewBox="0 0 800 800" for "${params.productTitle}".
 Style direction: ${params.stylePreset}.
 Rules:
@@ -206,20 +399,29 @@ Rules:
 - Do NOT include <script>, <foreignObject>, external image links, or inline event handlers.
 - Do NOT include placeholder text or watermarks.`;
 
-  if (params.provider === 'openrouter') {
-    const result = await callOpenRouterText(systemInstruction, params.prompt);
-    const svgMarkup = sanitizeSvgMarkup(result.text);
-    return {
-      svgMarkup,
-      caption: params.prompt.slice(0, 180),
-      model: result.model,
-    };
+  const ai = getGeminiClient();
+  const hasReference = Boolean(
+    params.referenceImageDataUrl && params.referenceImageDataUrl.startsWith('data:image/')
+  );
+
+  let contents: unknown = `Illustrate this page scene: ${params.prompt}`;
+  if (hasReference) {
+    const match = params.referenceImageDataUrl!.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (match) {
+      contents = {
+        parts: [
+          { inlineData: { mimeType: match[1], data: match[2] } },
+          {
+            text: `Using the subject from this uploaded reference photo, illustrate this scene as a charming storybook cartoon/illustration: ${params.prompt}`,
+          },
+        ],
+      };
+    }
   }
 
-  const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-4-hydrogen',
-    contents: `Illustrate this page scene: ${params.prompt}`,
+    contents: contents as string,
     config: {
       systemInstruction,
     },
@@ -228,7 +430,9 @@ Rules:
   const text = response.text?.trim() ?? '';
   const svgMarkup = sanitizeSvgMarkup(text);
   return {
-    svgMarkup,
+    buffer: Buffer.from(svgMarkup, 'utf-8'),
+    mimeType: 'image/svg+xml',
+    extension: '.svg',
     caption: params.prompt.slice(0, 180),
     model: 'gemini-4-hydrogen',
   };

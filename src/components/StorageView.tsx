@@ -134,39 +134,45 @@ export function StorageView({
         </div>
 
         <nav className="divide-y divide-slate-100 p-2" aria-label="Folder directory">
-          {products.map((product) => {
-            const folder = folders.find((f) => f.productId === product.id);
-            const count = assets.filter((a) => a.productId === product.id).length;
-            const active = product.id === currentProductId;
-            return (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => onSelectProduct(product.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2.5 text-left transition-colors ${
-                  active
-                    ? 'bg-blue-50 text-blue-900'
-                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <Folder
-                    className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-medium">{product.title}</div>
-                    <div className="truncate font-mono text-[11px] text-slate-400">
-                      {folder?.path ?? '/FolioPress/product'}
+          {products.length === 0 ? (
+            <div className="px-3 py-6 text-center text-xs text-slate-500">
+              No product folders yet. Create your first product in Library or Trends.
+            </div>
+          ) : (
+            products.map((product) => {
+              const folder = folders.find((f) => f.productId === product.id);
+              const count = assets.filter((a) => a.productId === product.id).length;
+              const active = product.id === currentProductId;
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => onSelectProduct(product.id)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'bg-blue-50 text-blue-900'
+                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Folder
+                      className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-medium">{product.title}</div>
+                      <div className="truncate font-mono text-[11px] text-slate-400">
+                        {folder?.path ?? '/FolioPress/product'}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <span className="font-mono text-xs text-slate-500 tabular-nums shrink-0">
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  <span className="font-mono text-xs text-slate-500 tabular-nums shrink-0">
+                    {count}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </nav>
       </aside>
 
@@ -204,6 +210,7 @@ export function StorageView({
               >
                 <option value="cover">Cover</option>
                 <option value="illustration">Illustration</option>
+                <option value="reference">Reference Photo</option>
                 <option value="manuscript">Manuscript</option>
               </select>
 

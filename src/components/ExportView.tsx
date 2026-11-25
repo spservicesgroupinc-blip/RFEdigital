@@ -171,13 +171,18 @@ export function ExportView({
               id="export-product"
               value={productId}
               onChange={(e) => onSelectProduct(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              disabled={products.length === 0}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             >
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
+              {products.length === 0 ? (
+                <option value="">No products yet — create one in Library or Trends</option>
+              ) : (
+                products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

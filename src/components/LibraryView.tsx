@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   BookPlus,
   ExternalLink,
   FolderOpen,
+  ImagePlus,
   Search,
   Sheet,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -39,6 +41,17 @@ interface LibraryViewProps {
     seriesId: string | null;
     isbn: string;
     manuscriptNotes: string;
+    referencePhoto?: {
+      name: string;
+      mimeType: string;
+      dataUrl: string;
+    };
+  }) => Promise<Product>;
+  onUploadReferencePhoto: (payload: {
+    productId: string;
+    name: string;
+    mimeType: string;
+    dataUrl: string;
   }) => Promise<void>;
   onUpdateProduct: (id: string, payload: Partial<Product>) => Promise<void>;
   onDeleteProduct: (id: string) => Promise<void>;
@@ -51,6 +64,7 @@ interface LibraryViewProps {
   onSyncGoogleSheets: () => Promise<void>;
   onBootstrapGoogleSheet: () => Promise<void>;
   onOpenModuleForProduct: (module: ModuleId, productId: string) => void;
+  onOpenIllustrationForProduct: (productId: string) => void;
   showNewProductModal: boolean;
   onCloseNewProductModal: () => void;
   onOpenNewProductModal: () => void;
@@ -84,12 +98,14 @@ export function LibraryView({
   settings,
   googleConnected,
   onCreateProduct,
+  onUploadReferencePhoto,
   onUpdateProduct,
   onDeleteProduct,
   onCreateSeries,
   onSyncGoogleSheets,
   onBootstrapGoogleSheet,
   onOpenModuleForProduct,
+  onOpenIllustrationForProduct,
   showNewProductModal,
   onCloseNewProductModal,
   onOpenNewProductModal,
@@ -112,6 +128,14 @@ export function LibraryView({
   const [seriesId, setSeriesId] = useState('');
   const [isbn, setIsbn] = useState('');
   const [manuscriptNotes, setManuscriptNotes] = useState('');
+  const [referencePhoto, setReferencePhoto] = useState<{
+    name: string;
+    mimeType: string;
+    dataUrl: string;
+  } | null>(null);
+  const referencePhotoInputRef = useRef<HTMLInputElement>(null);
+  const inspectorPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingInspectorPhoto, setUploadingInspectorPhoto] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -153,6 +177,45 @@ export function LibraryView({
     return map;
   }, [series]);
 
+  const handleReferencePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setFormErrors((prev) => ({
+        ...prev,
+        referencePhoto: 'Upload a PNG, JPEG, or WebP photo.',
+      }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFormErrors((prev) => ({
+        ...prev,
+        referencePhoto: 'Photo must be under 10 MB.',
+      }));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReferencePhoto({
+        name: file.name,
+        mimeType: file.type,
+        dataUrl: String(reader.result),
+      });
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next.referencePhoto;
+        return next;
+      });
+    };
+    reader.onerror = () => {
+      setFormErrors((prev) => ({
+        ...prev,
+        referencePhoto: 'Could not read the selected photo.',
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsedPages = Number(pageCount);
@@ -170,7 +233,7 @@ export function LibraryView({
     setSubmitting(true);
     setFormErrors({});
     try {
-      await onCreateProduct({
+      const created = await onCreateProduct({
         title: title.trim(),
         subtitle: subtitle.trim(),
         category,
@@ -181,13 +244,17 @@ export function LibraryView({
         seriesId: seriesId || null,
         isbn: isbn.trim(),
         manuscriptNotes: manuscriptNotes.trim(),
+        referencePhoto: referencePhoto ?? undefined,
       });
+      setSelectedProductId(created.id);
       setTitle('');
       setSubtitle('');
       setPageCount('24');
       setIsbn('');
       setManuscriptNotes('');
       setSeriesId('');
+      setReferencePhoto(null);
+      if (referencePhotoInputRef.current) referencePhotoInputRef.current.value = '';
       onCloseNewProductModal();
     } catch (err) {
       setFormErrors({
@@ -195,6 +262,30 @@ export function LibraryView({
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleInspectorPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProduct) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return;
+    setUploadingInspectorPhoto(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+      });
+      await onUploadReferencePhoto({
+        productId: selectedProduct.id,
+        name: file.name,
+        mimeType: file.type,
+        dataUrl,
+      });
+      if (inspectorPhotoInputRef.current) inspectorPhotoInputRef.current.value = '';
+    } finally {
+      setUploadingInspectorPhoto(false);
     }
   };
 
@@ -635,10 +726,76 @@ export function LibraryView({
                 </p>
               </div>
 
+              <input
+                ref={inspectorPhotoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleInspectorPhotoSelect}
+                className="hidden"
+                aria-label="Upload reference photo for selected product"
+              />
+
+              {selectedProduct.referenceAssetId &&
+              assetById.get(selectedProduct.referenceAssetId) ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded border border-slate-200 bg-white">
+                      <AssetPreviewImage
+                        src={assetById.get(selectedProduct.referenceAssetId)?.url}
+                        alt={`${selectedProduct.title} reference photo`}
+                        fallbackLabel="Photo"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-slate-800">
+                        Reference Photo Attached
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Ready for OpenRouter photo-to-cartoon &amp; storybook illustration.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={uploadingInspectorPhoto}
+                        onClick={() => inspectorPhotoInputRef.current?.click()}
+                        className="mt-1 text-[11px] font-medium text-blue-700 hover:text-blue-800"
+                      >
+                        {uploadingInspectorPhoto ? 'Uploading…' : 'Replace photo'}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenIllustrationForProduct(selectedProduct.id)}
+                    className="mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 whitespace-nowrap"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    Generate Cartoon / Illustration from Photo
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 p-3">
+                  <div className="text-xs font-medium text-slate-800">
+                    Add a Reference Photo (Optional)
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Upload a photo of a pet or character to generate cartoon illustrations via OpenRouter.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={uploadingInspectorPhoto}
+                    onClick={() => inspectorPhotoInputRef.current?.click()}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                    {uploadingInspectorPhoto ? 'Uploading photo…' : 'Upload Reference Photo'}
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2.5 border-t border-slate-200 pt-4">
                 <button
                   type="button"
-                  onClick={() => onOpenModuleForProduct('generation', selectedProduct.id)}
+                  onClick={() => onOpenIllustrationForProduct(selectedProduct.id)}
                   className="rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 whitespace-nowrap shrink-0"
                 >
                   Open in Studio
@@ -850,6 +1007,81 @@ export function LibraryView({
                   placeholder="Optional story notes, visual motifs, or target KDP keywords…"
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
                 />
+              </div>
+
+              {/* Optional Reference Photo Upload for AI Cartoon / Illustration */}
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="prod-ref-photo"
+                    className="block text-xs font-medium text-slate-700"
+                  >
+                    Reference Photo (Optional — for AI Cartoon / Illustration)
+                  </label>
+                  {referencePhoto && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferencePhoto(null);
+                        if (referencePhotoInputRef.current) {
+                          referencePhotoInputRef.current.value = '';
+                        }
+                      }}
+                      className="text-xs font-medium text-red-700 hover:text-red-800 whitespace-nowrap shrink-0"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Upload a photo of a pet, character, or object to turn it into cartoon or storybook art with OpenRouter.
+                </p>
+
+                <input
+                  ref={referencePhotoInputRef}
+                  id="prod-ref-photo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleReferencePhotoSelect}
+                  className="hidden"
+                />
+
+                {referencePhoto ? (
+                  <div className="mt-2.5 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-2.5">
+                    <img
+                      src={referencePhoto.dataUrl}
+                      alt="Selected reference photo preview"
+                      className="h-14 w-14 shrink-0 rounded border border-slate-200 object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-medium text-slate-900">
+                        {referencePhoto.name}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => referencePhotoInputRef.current?.click()}
+                        className="mt-1 text-xs font-medium text-blue-700 hover:text-blue-800"
+                      >
+                        Choose different photo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => referencePhotoInputRef.current?.click()}
+                    className="mt-2.5 inline-flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2.5 text-xs font-medium text-slate-700 transition-colors hover:border-blue-600 hover:bg-blue-50/30 hover:text-blue-800"
+                  >
+                    <ImagePlus className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    Upload Photo (PNG, JPEG, or WebP)
+                  </button>
+                )}
+
+                {formErrors.referencePhoto && (
+                  <p role="alert" className="mt-1.5 text-xs text-red-700">
+                    {formErrors.referencePhoto}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-4">

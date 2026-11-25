@@ -1,7 +1,7 @@
 {
   "settings": {
     "studioName": "FolioPress",
-    "authorImprint": "Northwood Picture Press",
+    "authorImprint": "FolioPress Studio",
     "connectedSpreadsheetId": "",
     "connectedSpreadsheetUrl": "",
     "connectedDriveRootId": "",
@@ -10,447 +10,282 @@
     "appsScriptConfigured": true,
     "appsScriptLastSyncAt": null
   },
-  "series": [
-    {
-      "id": "ser-lantern-bear",
-      "name": "The Lantern Bear Chronicles",
-      "description": "Bedtime gouache picture books following Barnaby the young bear and his woodland neighbors across seasonal adventures.",
-      "targetAge": "Ages 4–7",
-      "marketplace": "Amazon KDP",
-      "createdAt": "2026-10-12T10:00:00.000Z"
-    },
-    {
-      "id": "ser-archival-botanicals",
-      "name": "Archival Field & Meadow Editions",
-      "description": "Botanical fine art prints and detailed cottage coloring books designed for print-on-demand and Etsy digital bundles.",
-      "targetAge": "All Ages",
-      "marketplace": "Etsy Digital",
-      "createdAt": "2026-10-20T14:15:00.000Z"
-    }
-  ],
+  "series": [],
   "products": [
     {
-      "id": "prod-479747f6",
+      "id": "prod-84e6f049",
       "seriesId": null,
-      "title": "Christmas Coloring Pages for Kids",
-      "subtitle": "Ages 4-10 · Etsy ($2.99 - $5.99)",
+      "title": "Christmas Cozy Coloring Pages",
+      "subtitle": "Ages 4-10 · Etsy ($3.00 - $5.00)",
       "category": "coloring-book",
       "status": "draft",
       "trimSize": "8.5x11",
-      "pageCount": 20,
+      "pageCount": 30,
       "includeBleed": false,
-      "isbn": "979-8-2791-4699-0",
+      "isbn": "979-8-3452-3691-0",
       "coverAssetId": null,
       "driveFolderId": null,
       "sheetsRowSyncedAt": null,
-      "manuscriptNotes": "[TREND RESEARCH BRIEF]\nNiche Opportunity: Christmas Coloring Pages for Kids\nTarget Marketplaces: Etsy, Teachers Pay Teachers ($2.99 - $5.99)\nAudience: Ages 4-10 · Seasonality: Seasonal (peak from late November to December)\n\nHook Concept:\nFun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!\n\nWinning Differentiation Angle:\nCreate a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.\n\nArt Style Direction:\nWhimsical and festive illustrations\n\nBuyer Pain Points to Solve:\n- Need for engaging holiday activities for children\n- Desire for affordable and printable entertainment options\n\nReview Complaints from Deep-Dive:\n- Pages are too simple or not engaging enough for older kids\n- Some designs are repetitive or lack variety\n- Quality of printouts can vary based on printer settings\n- Files are sometimes difficult to download or access\n\nSeed Keywords: Christmas coloring pages, holiday activities for kids, printable Christmas crafts, educational coloring sheets, festive coloring book, Christmas coloring activities, printable holiday coloring pages, kids Christmas crafts, Christmas coloring book for toddlers, easy Christmas coloring pages",
-      "createdAt": "2026-11-25T12:00:33.003Z",
-      "updatedAt": "2026-11-25T12:00:33.003Z"
+      "manuscriptNotes": "[TREND RESEARCH BRIEF]\nNiche Opportunity: Christmas Cozy Coloring Pages\nTarget Marketplaces: Etsy ($3.00 - $5.00)\nAudience: Ages 4-10 · Seasonality: Seasonal (peak window January 24 - February 23)\n\nHook Concept:\nCozy Christmas coloring fun for the whole family!\n\nWinning Differentiation Angle:\nFocus on cozy themes with bold lines and simple designs that appeal to both children and adults.\n\nArt Style Direction:\nBold and easy designs with cozy winter scenes.\n\nBuyer Pain Points to Solve:\n- Need for engaging holiday activities for children.\n- Desire for unique and creative holiday-themed gifts.\n\nSeed Keywords: Christmas coloring pages, cozy coloring book, holiday activities for kids, winter coloring pages, easy Christmas crafts",
+      "createdAt": "2026-11-25T12:24:25.542Z",
+      "updatedAt": "2026-11-25T12:24:25.542Z"
     },
     {
-      "id": "prod-lantern-bear-1",
-      "seriesId": "ser-lantern-bear",
-      "title": "The Lantern Bear and the Firefly Brook",
-      "subtitle": "Book 1 in The Lantern Bear Chronicles",
-      "category": "childrens-book",
-      "status": "ready-for-kdp",
-      "trimSize": "8.5x8.5",
-      "pageCount": 24,
-      "includeBleed": true,
-      "isbn": "979-8-8914-2011-4",
-      "coverAssetId": "asset-lantern-cover",
-      "driveFolderId": null,
-      "sheetsRowSyncedAt": null,
-      "manuscriptNotes": "Spread 1: When twilight brushed the tall pines blue, Barnaby lifted his little brass lantern.\nSpread 2: Down by the stepping stones, silver fireflies danced above paper boats.",
-      "createdAt": "2026-10-14T09:00:00.000Z",
-      "updatedAt": "2026-11-24T15:30:00.000Z"
-    },
-    {
-      "id": "prod-cloud-atelier",
-      "seriesId": "ser-lantern-bear",
-      "title": "The Cloud Ship of Swallow Ridge",
-      "subtitle": "Book 2 in The Lantern Bear Chronicles",
+      "id": "prod-febf4e06",
+      "seriesId": null,
+      "title": "Zebo",
+      "subtitle": "The Dog",
       "category": "childrens-book",
       "status": "in-production",
       "trimSize": "8.5x8.5",
-      "pageCount": 28,
+      "pageCount": 8,
       "includeBleed": true,
-      "isbn": "979-8-8914-2012-1",
-      "coverAssetId": "asset-cloud-cover",
+      "isbn": "979-8-3765-3540-0",
+      "coverAssetId": "asset-00f9b736",
       "driveFolderId": null,
       "sheetsRowSyncedAt": null,
-      "manuscriptNotes": "Spread 1: High above the orchard hills, the stitched canvas balloon caught the morning breeze.",
-      "createdAt": "2026-10-28T11:20:00.000Z",
-      "updatedAt": "2026-11-24T15:30:00.000Z"
-    },
-    {
-      "id": "prod-meadow-coloring",
-      "seriesId": "ser-archival-botanicals",
-      "title": "Enchanted Meadow Cottage Coloring Book",
-      "subtitle": "30 Single-Sided Botanical Line Art Plates",
-      "category": "coloring-book",
-      "status": "in-production",
-      "trimSize": "8.5x11",
-      "pageCount": 30,
-      "includeBleed": false,
-      "isbn": "979-8-8914-2044-2",
-      "coverAssetId": "asset-meadow-plate",
-      "driveFolderId": null,
-      "sheetsRowSyncedAt": null,
-      "manuscriptNotes": "Single-sided 8.5x11 plates with generous 0.625 in framing margins for markers and colored pencils.",
-      "createdAt": "2026-11-04T16:40:00.000Z",
-      "updatedAt": "2026-11-24T15:30:00.000Z"
-    },
-    {
-      "id": "prod-botanical-prints",
-      "seriesId": "ser-archival-botanicals",
-      "title": "Woodland Maidenhair Botanical Print Set",
-      "subtitle": "Archival 8×10 Gallery Wall Art Collection",
-      "category": "art-print",
-      "status": "published",
-      "trimSize": "8x10",
-      "pageCount": 12,
-      "includeBleed": false,
-      "isbn": "ETSY-BF-2026-01",
-      "coverAssetId": "asset-fern-print",
-      "driveFolderId": null,
-      "sheetsRowSyncedAt": null,
-      "manuscriptNotes": "Includes 300 DPI printable PDF portfolio and framed print care instruction card.",
-      "createdAt": "2026-11-09T13:10:00.000Z",
-      "updatedAt": "2026-11-24T15:30:00.000Z"
+      "manuscriptNotes": "Black and white dog\n\n**Title:** Zebo: The Cloud Chaser\n\n---\n\n**Page 1:**\nIn a quaint little village, not far from the sea,  \nLived a joyful young creature, as happy as could be.  \nHis name was Zebo, a fluffball of cheer,  \nWith bright, twinkling eyes that sparkled so clear.\n\n---\n\n**Page 2:**\nZebo had dreams, as big as the sky,  \nHe longed to chase clouds, oh so high!  \nWith a heart full of laughter and wings slightly askew,  \nHe’d soar through the fields where the daisies once grew.\n\n---\n\n**Page 3:**\n“Today’s the day!” Zebo declared with delight,  \n“Adventure awaits in the morning light!”  \nHe packed up his snacks—some berries and nuts,  \nAnd whistled a tune, dancing around in big gulps.\n\n---\n\n**Page 4:**\nOff he set bouncing, through meadows so green,  \nWith each little hop, oh, how merry he'd seem!  \nThe sun peeked and shone on his fluffy, soft head,  \nAs he laughed with the flowers—a new day ahead!\n\n---\n\n**Page 5:**\n“Up, up in the sky!” said the wispy white cloud,  \n“Come chase me, dear Zebo! Come join the proud!”  \nWith a whirl and a twirl, Zebo raced with delight,  \nHis heart filled with joy, oh, what a marvelous sight!\n\n---\n\n**Page 6:**\nThrough valleys and hills, past the whispering trees,  \nHe giggled with breezes that danced like a tease.  \n“Dear friend, little Zebo, why hurry so fast?  \nSlow down and enjoy the smiles that we cast!”\n\n---\n\n**Page 7:**\nBut Zebo, so eager, just laughed and he spun,  \n“I’m catching those clouds! Oh, this is such fun!”  \nWith each jump and each glide, he chased with a cheer,  \nNot knowing what wonders were waiting quite near.\n\n---\n\n**Page 8:**\nThen suddenly, Zebo felt something amiss,  \nThe clouds turned to shadows, and out came a mist.  \n“Oh no!” cried Zebo, “Will I lose my dear friend?  \nI’d chase them forever, but now it may end!”\n\n---\n\n**Page 9:**\nJust then from the shadows came a soft, gentle voice,  \n“Don’t worry, dear Zebo, let’s make a wise choice.  \nSometimes clouds vanish, but new ones will rise,  \nAnd the brightest of suns will light up the skies.”\n\n---\n\n**Page 10:**\nZebo paused for a moment, took a deep breath,  \nRealizing his journey was not just for zest.  \nHe cherished the moments, the giggles, the care,  \nAnd found joy in the now, with friends everywhere.\n\n---\n\n**Page 11:**\nSo Zebo decided to linger a while,  \nTo play with the breezes and share in their smile.  \nWith clouds passing gently, like whispers on air,  \nHe danced and he spun, without a single care.\n\n---\n\n**Page 12:**\nAs dusk nestled in, painting skies pink and blue,  \nZebo returned home, with a heart pretty new.  \nFor he learned in his travels, through laughter and cheer,  \nThe journey’s the treasure—oh yes, my dear!\n\n---\n\n**Page 13:**\nFrom that day forward, Zebo found bliss,  \nIn clouds that would shimmer and even those missed.  \nFor the laughter he shared and the friends that he made,  \nWere the true shining jewels in the skies that would fade.\n\n---\n\n**Page 14:**\nSo come along, children, let's follow his lead,  \nLet’s chase our own dreams, plant hope like a seed.  \nFor Zebo is waiting, just open your eyes—  \nAdventure is waiting, beyond the bright skies!\n\n---\n\n**Author’s Note:**\nJoin Zebo on his next adventure where he discovers the magic of friendship and the true meaning of happiness. The skies are just the beginning!\n\n--- \n\n**End**",
+      "createdAt": "2026-11-25T12:14:22.152Z",
+      "updatedAt": "2026-11-25T12:18:46.893Z"
     }
   ],
   "folders": [
     {
-      "id": "fld-lantern-bear",
-      "productId": "prod-lantern-bear-1",
-      "name": "the-lantern-bear-and-the-firefly-brook",
-      "path": "/FolioPress/the-lantern-bear-and-the-firefly-brook",
+      "id": "fld-d14e12e5",
+      "productId": "prod-febf4e06",
+      "name": "zebo",
+      "path": "/FolioPress/zebo",
       "driveFolderId": null,
-      "createdAt": "2026-10-14T09:00:00.000Z"
+      "createdAt": "2026-11-25T12:14:22.153Z"
     },
     {
-      "id": "fld-cloud-atelier",
-      "productId": "prod-cloud-atelier",
-      "name": "the-cloud-ship-of-swallow-ridge",
-      "path": "/FolioPress/the-cloud-ship-of-swallow-ridge",
+      "id": "fld-816a3021",
+      "productId": "prod-84e6f049",
+      "name": "christmas-cozy-coloring-pages",
+      "path": "/FolioPress/christmas-cozy-coloring-pages",
       "driveFolderId": null,
-      "createdAt": "2026-10-28T11:20:00.000Z"
-    },
-    {
-      "id": "fld-meadow-coloring",
-      "productId": "prod-meadow-coloring",
-      "name": "enchanted-meadow-cottage-coloring-book",
-      "path": "/FolioPress/enchanted-meadow-cottage-coloring-book",
-      "driveFolderId": null,
-      "createdAt": "2026-11-04T16:40:00.000Z"
-    },
-    {
-      "id": "fld-botanical-prints",
-      "productId": "prod-botanical-prints",
-      "name": "woodland-maidenhair-botanical-print-set",
-      "path": "/FolioPress/woodland-maidenhair-botanical-print-set",
-      "driveFolderId": null,
-      "createdAt": "2026-11-09T13:10:00.000Z"
-    },
-    {
-      "id": "fld-26e8dee8",
-      "productId": "prod-479747f6",
-      "name": "christmas-coloring-pages-for-kids",
-      "path": "/FolioPress/christmas-coloring-pages-for-kids",
-      "driveFolderId": null,
-      "createdAt": "2026-11-25T12:00:33.003Z"
+      "createdAt": "2026-11-25T12:24:25.543Z"
     }
   ],
   "assets": [
     {
-      "id": "asset-lantern-cover",
-      "folderId": "fld-lantern-bear",
-      "productId": "prod-lantern-bear-1",
-      "name": "01-front-cover-lantern-bear.jpg",
-      "kind": "cover",
-      "mimeType": "image/jpeg",
-      "sizeBytes": 412800,
-      "url": "/src/assets/images/cover_lantern_bear_1795604336162.jpg",
-      "caption": "When twilight brushed the tall pines blue, Barnaby lifted his warm brass lantern.",
-      "pageOrder": 1,
-      "driveFileId": null,
-      "driveWebLink": null,
-      "createdAt": "2026-10-15T10:00:00.000Z"
-    },
-    {
-      "id": "asset-lantern-spread-1",
-      "folderId": "fld-lantern-bear",
-      "productId": "prod-lantern-bear-1",
-      "name": "02-spread-firefly-brook.jpg",
+      "id": "asset-00f9b736",
+      "folderId": "fld-d14e12e5",
+      "productId": "prod-febf4e06",
+      "name": "zebo-cef81a.svg",
       "kind": "illustration",
-      "mimeType": "image/jpeg",
-      "sizeBytes": 486200,
-      "url": "/src/assets/images/spread_lantern_river_1795604338150.jpg",
-      "caption": "At the stepping-stone brook, silver fireflies guided paper boats beneath the crescent moon.",
-      "pageOrder": 2,
-      "driveFileId": null,
-      "driveWebLink": null,
-      "createdAt": "2026-10-16T11:30:00.000Z"
-    },
-    {
-      "id": "asset-cloud-cover",
-      "folderId": "fld-cloud-atelier",
-      "productId": "prod-cloud-atelier",
-      "name": "01-cover-cloud-ship.jpg",
-      "kind": "cover",
-      "mimeType": "image/jpeg",
-      "sizeBytes": 398400,
-      "url": "/src/assets/images/cover_cloud_atelier_1795604338375.jpg",
-      "caption": "High above Swallow Ridge, the wooden sky-boat sailed alongside folded paper swallows.",
+      "mimeType": "image/svg+xml",
+      "sizeBytes": 2345,
+      "url": "/api/storage/files/zebo-cef81a.svg",
+      "caption": "A warm woodland lantern bear and a red fox standing on mossy stepping stones beside a twilight river filled with floating origami paper boats.",
       "pageOrder": 1,
       "driveFileId": null,
       "driveWebLink": null,
-      "createdAt": "2026-10-29T09:45:00.000Z"
-    },
-    {
-      "id": "asset-meadow-plate",
-      "folderId": "fld-meadow-coloring",
-      "productId": "prod-meadow-coloring",
-      "name": "01-plate-meadow-cottage.jpg",
-      "kind": "illustration",
-      "mimeType": "image/jpeg",
-      "sizeBytes": 356900,
-      "url": "/src/assets/images/cover_meadow_coloring_1795604339662.jpg",
-      "caption": "Plate 01 — Thatched Meadow Cottage & Butterfly Archway",
-      "pageOrder": 1,
-      "driveFileId": null,
-      "driveWebLink": null,
-      "createdAt": "2026-11-05T14:00:00.000Z"
-    },
-    {
-      "id": "asset-fern-print",
-      "folderId": "fld-botanical-prints",
-      "productId": "prod-botanical-prints",
-      "name": "01-print-maidenhair-fern.jpg",
-      "kind": "cover",
-      "mimeType": "image/jpeg",
-      "sizeBytes": 329100,
-      "url": "/src/assets/images/print_botanical_fern_1795604340121.jpg",
-      "caption": "Plate I — Adiantum pedatum (Woodland Maidenhair Fern & Wild Chamomile)",
-      "pageOrder": 1,
-      "driveFileId": null,
-      "driveWebLink": null,
-      "createdAt": "2026-11-10T10:15:00.000Z"
+      "createdAt": "2026-11-25T12:16:14.909Z"
     }
   ],
   "generations": [
     {
-      "id": "gen-seed-1",
-      "productId": "prod-lantern-bear-1",
-      "mode": "kdp-metadata",
-      "provider": "gemini",
-      "model": "gemini-4-hydrogen",
-      "prompt": "Draft Amazon KDP back-cover blurb and BISAC categories for The Lantern Bear and the Firefly Brook.",
-      "outputText": "When twilight settles over Whispering Pine Valley, Barnaby the young bear sets off along the mossy brook with his glowing brass lantern. Alongside a clever red fox and a fleet of folded paper boats, Barnaby discovers that even the smallest light can guide a friend home.\n\nRecommended KDP Categories:\n• Juvenile Fiction / Bedtime & Dreams\n• Juvenile Fiction / Animals / Bears\n• Juvenile Fiction / Nature & the Natural World",
-      "createdAt": "2026-11-20T16:00:00.000Z"
+      "id": "gen-0b0b72d5",
+      "productId": "prod-fef45aff",
+      "mode": "illustration",
+      "provider": "openrouter",
+      "model": "google/gemini-2.5-flash-image",
+      "prompt": "Turn this character into a cheerful 3D animated storybook cartoon wearing a bright red scarf in a sunlit park",
+      "assetId": "asset-613a16a3",
+      "createdAt": "2026-11-25T12:25:24.981Z"
+    },
+    {
+      "id": "gen-afd1d617",
+      "productId": "prod-febf4e06",
+      "mode": "illustration",
+      "provider": "openrouter",
+      "model": "openai/gpt-4o-mini",
+      "prompt": "A warm woodland lantern bear and a red fox standing on mossy stepping stones beside a twilight river filled with floating origami paper boats.",
+      "assetId": "asset-00f9b736",
+      "createdAt": "2026-11-25T12:16:14.909Z"
+    },
+    {
+      "id": "gen-85e712a7",
+      "productId": "prod-febf4e06",
+      "mode": "manuscript",
+      "provider": "openrouter",
+      "model": "openai/gpt-4o-mini",
+      "prompt": "Generate the first book in a series about zebo",
+      "outputText": "**Title:** Zebo: The Cloud Chaser\n\n---\n\n**Page 1:**\nIn a quaint little village, not far from the sea,  \nLived a joyful young creature, as happy as could be.  \nHis name was Zebo, a fluffball of cheer,  \nWith bright, twinkling eyes that sparkled so clear.\n\n---\n\n**Page 2:**\nZebo had dreams, as big as the sky,  \nHe longed to chase clouds, oh so high!  \nWith a heart full of laughter and wings slightly askew,  \nHe’d soar through the fields where the daisies once grew.\n\n---\n\n**Page 3:**\n“Today’s the day!” Zebo declared with delight,  \n“Adventure awaits in the morning light!”  \nHe packed up his snacks—some berries and nuts,  \nAnd whistled a tune, dancing around in big gulps.\n\n---\n\n**Page 4:**\nOff he set bouncing, through meadows so green,  \nWith each little hop, oh, how merry he'd seem!  \nThe sun peeked and shone on his fluffy, soft head,  \nAs he laughed with the flowers—a new day ahead!\n\n---\n\n**Page 5:**\n“Up, up in the sky!” said the wispy white cloud,  \n“Come chase me, dear Zebo! Come join the proud!”  \nWith a whirl and a twirl, Zebo raced with delight,  \nHis heart filled with joy, oh, what a marvelous sight!\n\n---\n\n**Page 6:**\nThrough valleys and hills, past the whispering trees,  \nHe giggled with breezes that danced like a tease.  \n“Dear friend, little Zebo, why hurry so fast?  \nSlow down and enjoy the smiles that we cast!”\n\n---\n\n**Page 7:**\nBut Zebo, so eager, just laughed and he spun,  \n“I’m catching those clouds! Oh, this is such fun!”  \nWith each jump and each glide, he chased with a cheer,  \nNot knowing what wonders were waiting quite near.\n\n---\n\n**Page 8:**\nThen suddenly, Zebo felt something amiss,  \nThe clouds turned to shadows, and out came a mist.  \n“Oh no!” cried Zebo, “Will I lose my dear friend?  \nI’d chase them forever, but now it may end!”\n\n---\n\n**Page 9:**\nJust then from the shadows came a soft, gentle voice,  \n“Don’t worry, dear Zebo, let’s make a wise choice.  \nSometimes clouds vanish, but new ones will rise,  \nAnd the brightest of suns will light up the skies.”\n\n---\n\n**Page 10:**\nZebo paused for a moment, took a deep breath,  \nRealizing his journey was not just for zest.  \nHe cherished the moments, the giggles, the care,  \nAnd found joy in the now, with friends everywhere.\n\n---\n\n**Page 11:**\nSo Zebo decided to linger a while,  \nTo play with the breezes and share in their smile.  \nWith clouds passing gently, like whispers on air,  \nHe danced and he spun, without a single care.\n\n---\n\n**Page 12:**\nAs dusk nestled in, painting skies pink and blue,  \nZebo returned home, with a heart pretty new.  \nFor he learned in his travels, through laughter and cheer,  \nThe journey’s the treasure—oh yes, my dear!\n\n---\n\n**Page 13:**\nFrom that day forward, Zebo found bliss,  \nIn clouds that would shimmer and even those missed.  \nFor the laughter he shared and the friends that he made,  \nWere the true shining jewels in the skies that would fade.\n\n---\n\n**Page 14:**\nSo come along, children, let's follow his lead,  \nLet’s chase our own dreams, plant hope like a seed.  \nFor Zebo is waiting, just open your eyes—  \nAdventure is waiting, beyond the bright skies!\n\n---\n\n**Author’s Note:**\nJoin Zebo on his next adventure where he discovers the magic of friendship and the true meaning of happiness. The skies are just the beginning!\n\n--- \n\n**End**",
+      "createdAt": "2026-11-25T12:15:01.084Z"
     }
   ],
   "plans": [
     {
-      "id": "plan-46a0f244",
-      "productId": "prod-479747f6",
+      "id": "plan-90784830",
+      "productId": "prod-84e6f049",
       "seriesId": null,
-      "name": "Christmas Coloring Pages for Kids — Starter Batch",
+      "name": "Picture Book Production Batch",
+      "templateId": "tpl-picture-book-24",
+      "trimSize": "8.5x11",
+      "steps": [
+        {
+          "id": "step-ed1178f4",
+          "order": 1,
+          "title": "Story Manuscript & Page Breaks",
+          "stepType": "manuscript",
+          "prompt": "Write a gentle 8-spread children’s picture book manuscript (ages 4-7) with rhythmic read-aloud cadence and clear visual cues per spread.",
+          "queued": false
+        },
+        {
+          "id": "step-dd7f634f",
+          "order": 2,
+          "title": "Spread 1 — Opening Forest Scene",
+          "stepType": "illustration",
+          "prompt": "Warm storybook illustration of the opening twilight pine forest path with a brass lantern, soft gouache color palette, centered focal subject.",
+          "queued": false
+        },
+        {
+          "id": "step-832a948e",
+          "order": 3,
+          "title": "Spread 2 — River Crossing Adventure",
+          "stepType": "illustration",
+          "prompt": "Storybook illustration of two woodland friends crossing mossy stepping stones over a starlit brook with floating paper lanterns.",
+          "queued": false
+        },
+        {
+          "id": "step-942160b8",
+          "order": 4,
+          "title": "KDP Print-Ready Interior PDF",
+          "stepType": "export",
+          "prompt": "Assemble ordered book assets into an 8.5×8.5 in full-bleed KDP interior PDF.",
+          "queued": false
+        }
+      ],
+      "createdAt": "2026-11-25T12:24:45.063Z",
+      "updatedAt": "2026-11-25T12:24:45.063Z"
+    },
+    {
+      "id": "plan-056f6dda",
+      "productId": "prod-84e6f049",
+      "seriesId": null,
+      "name": "Picture Book Production Batch",
+      "templateId": "tpl-picture-book-24",
+      "trimSize": "8.5x11",
+      "steps": [
+        {
+          "id": "step-9964dcb4",
+          "order": 1,
+          "title": "Story Manuscript & Page Breaks",
+          "stepType": "manuscript",
+          "prompt": "Write a gentle 8-spread children’s picture book manuscript (ages 4-7) with rhythmic read-aloud cadence and clear visual cues per spread.",
+          "queued": false
+        },
+        {
+          "id": "step-ab8adc4e",
+          "order": 2,
+          "title": "Spread 1 — Opening Forest Scene",
+          "stepType": "illustration",
+          "prompt": "Warm storybook illustration of the opening twilight pine forest path with a brass lantern, soft gouache color palette, centered focal subject.",
+          "queued": false
+        },
+        {
+          "id": "step-6013c3ad",
+          "order": 3,
+          "title": "Spread 2 — River Crossing Adventure",
+          "stepType": "illustration",
+          "prompt": "Storybook illustration of two woodland friends crossing mossy stepping stones over a starlit brook with floating paper lanterns.",
+          "queued": false
+        },
+        {
+          "id": "step-b238d4bd",
+          "order": 4,
+          "title": "KDP Print-Ready Interior PDF",
+          "stepType": "export",
+          "prompt": "Assemble ordered book assets into an 8.5×8.5 in full-bleed KDP interior PDF.",
+          "queued": false
+        }
+      ],
+      "createdAt": "2026-11-25T12:24:32.532Z",
+      "updatedAt": "2026-11-25T12:24:32.532Z"
+    },
+    {
+      "id": "plan-7329e381",
+      "productId": "prod-84e6f049",
+      "seriesId": null,
+      "name": "Christmas Cozy Coloring Pages — Starter Batch",
       "templateId": "trend-blueprint",
       "trimSize": "8.5x11",
       "steps": [
         {
-          "id": "step-02bc9a30",
+          "id": "step-001d9982",
           "order": 1,
           "title": "Listing Copy, Outline & Keyword Pack",
           "stepType": "manuscript",
-          "prompt": "Draft the core outline, marketplace listing description, and content structure for \"Christmas Coloring Pages for Kids\" targeting Ages 4-10. Hook: Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!. Winning angle: Create a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.. Incorporate keywords: Christmas coloring pages, holiday activities for kids, printable Christmas crafts, educational coloring sheets, festive coloring book, Christmas coloring activities, printable holiday coloring pages.",
+          "prompt": "Draft the core outline, marketplace listing description, and content structure for \"Christmas Cozy Coloring Pages\" targeting Ages 4-10. Hook: Cozy Christmas coloring fun for the whole family!. Winning angle: Focus on cozy themes with bold lines and simple designs that appeal to both children and adults.. Incorporate keywords: Christmas coloring pages, cozy coloring book, holiday activities for kids, winter coloring pages, easy Christmas crafts.",
           "queued": false
         },
         {
-          "id": "step-5b80ed02",
+          "id": "step-b18f0ca2",
           "order": 2,
           "title": "Cover / Hero Visual Concept",
           "stepType": "illustration",
-          "prompt": "Create the hero cover artwork for \"Christmas Coloring Pages for Kids\" (coloring-book). Hook concept: Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!. Art direction: Whimsical and festive illustrations.",
+          "prompt": "Create the hero cover artwork for \"Christmas Cozy Coloring Pages\" (coloring-book). Hook concept: Cozy Christmas coloring fun for the whole family!. Art direction: Bold and easy designs with cozy winter scenes..",
           "queued": false
         },
         {
-          "id": "step-d6765771",
+          "id": "step-9061c381",
           "order": 3,
           "title": "Signature Interior Plate / Spread 01",
           "stepType": "illustration",
-          "prompt": "Create the flagship interior page or spread for \"Christmas Coloring Pages for Kids\" tailored for Ages 4-10. Art direction: Whimsical and festive illustrations. Ensure clean composition suitable for 8.5x11 printing.",
+          "prompt": "Create the flagship interior page or spread for \"Christmas Cozy Coloring Pages\" tailored for Ages 4-10. Art direction: Bold and easy designs with cozy winter scenes.. Ensure clean composition suitable for 8.5x11 printing.",
           "queued": false
         },
         {
-          "id": "step-7b8e207b",
+          "id": "step-7b3156c5",
           "order": 4,
           "title": "Assemble 8.5x11\" Print-Ready PDF",
           "stepType": "export",
-          "prompt": "Assemble ordered product assets into a 8.5x11 in print-ready PDF for Etsy & Teachers Pay Teachers.",
+          "prompt": "Assemble ordered product assets into a 8.5x11 in print-ready PDF for Etsy.",
           "queued": false
         }
       ],
-      "createdAt": "2026-11-25T12:00:33.003Z",
-      "updatedAt": "2026-11-25T12:00:33.003Z"
-    },
-    {
-      "id": "plan-lantern-book-2",
-      "productId": "prod-cloud-atelier",
-      "seriesId": "ser-lantern-bear",
-      "name": "Cloud Ship — Interior Spread Batch",
-      "templateId": "tpl-picture-book-24",
-      "trimSize": "8.5x8.5",
-      "steps": [
-        {
-          "id": "step-cs-1",
-          "order": 1,
-          "title": "Draft 6-Spread Story Arc & Read-Aloud Copy",
-          "stepType": "manuscript",
-          "prompt": "Write a soothing 6-spread children’s picture book text for \"The Cloud Ship of Swallow Ridge\" about an origami swallow guiding a wooden airship home before dusk.",
-          "queued": true
-        },
-        {
-          "id": "step-cs-2",
-          "order": 2,
-          "title": "Illustration — Sunlit Cumulus Harbor",
-          "stepType": "illustration",
-          "prompt": "Gouache storybook scene of a wooden cloud ship moored to a lighthouse tower on a misty mountain peak at golden hour.",
-          "queued": true
-        },
-        {
-          "id": "step-cs-3",
-          "order": 3,
-          "title": "Assemble KDP 8.5×8.5 Full-Bleed Proof PDF",
-          "stepType": "export",
-          "prompt": "Compile Cloud Ship assets into an 8.5×8.5 in full-bleed KDP proof PDF.",
-          "queued": true
-        }
-      ],
-      "createdAt": "2026-11-12T08:30:00.000Z",
-      "updatedAt": "2026-11-25T11:12:19.330Z"
+      "createdAt": "2026-11-25T12:24:25.542Z",
+      "updatedAt": "2026-11-25T12:24:25.542Z"
     }
   ],
-  "jobs": [
-    {
-      "planId": "plan-lantern-book-2",
-      "productId": "prod-cloud-atelier",
-      "title": "The Cloud Ship of Swallow Ridge — Illustration — Sunlit Cumulus Harbor",
-      "stepType": "illustration",
-      "prompt": "Gouache storybook scene of a wooden cloud ship moored to a lighthouse tower on a misty mountain peak at golden hour.",
-      "provider": "gemini",
-      "status": "queued",
-      "attempts": 0,
-      "maxAttempts": 3,
-      "resultAssetId": null,
-      "resultSummary": null,
-      "errorMessage": null,
-      "id": "job-917d5ad4",
-      "createdAt": "2026-11-25T11:12:19.330Z",
-      "updatedAt": "2026-11-25T11:12:19.330Z"
-    },
-    {
-      "planId": "plan-lantern-book-2",
-      "productId": "prod-cloud-atelier",
-      "title": "The Cloud Ship of Swallow Ridge — Assemble KDP 8.5×8.5 Full-Bleed Proof PDF",
-      "stepType": "export",
-      "prompt": "Compile Cloud Ship assets into an 8.5×8.5 in full-bleed KDP proof PDF.",
-      "provider": "gemini",
-      "status": "queued",
-      "attempts": 0,
-      "maxAttempts": 3,
-      "resultAssetId": null,
-      "resultSummary": null,
-      "errorMessage": null,
-      "id": "job-d12d18aa",
-      "createdAt": "2026-11-25T11:12:19.331Z",
-      "updatedAt": "2026-11-25T11:12:19.330Z"
-    },
-    {
-      "id": "job-seed-1",
-      "planId": "plan-lantern-book-2",
-      "productId": "prod-cloud-atelier",
-      "title": "The Cloud Ship of Swallow Ridge — Draft 6-Spread Story Arc",
-      "stepType": "manuscript",
-      "prompt": "Write a soothing 6-spread children’s picture book text for \"The Cloud Ship of Swallow Ridge\" about an origami swallow guiding a wooden airship home before dusk.",
-      "provider": "gemini",
-      "status": "completed",
-      "attempts": 1,
-      "maxAttempts": 3,
-      "resultAssetId": null,
-      "resultSummary": "Generated 6 rhythmic story spreads (412 words) saved to product manuscript notes.",
-      "errorMessage": null,
-      "createdAt": "2026-11-23T09:10:00.000Z",
-      "updatedAt": "2026-11-23T09:10:18.000Z"
-    },
-    {
-      "id": "job-seed-2",
-      "planId": null,
-      "productId": "prod-meadow-coloring",
-      "title": "Enchanted Meadow Cottage — KDP Listing Keywords & Back Cover Copy",
-      "stepType": "manuscript",
-      "prompt": "Write Amazon KDP back-cover copy and 7 backend keyword phrases for Enchanted Meadow Cottage Coloring Book (8.5x11 single-sided botanical line art).",
-      "provider": "gemini",
-      "status": "queued",
-      "attempts": 0,
-      "maxAttempts": 3,
-      "resultAssetId": null,
-      "resultSummary": null,
-      "errorMessage": null,
-      "createdAt": "2026-11-24T14:20:00.000Z",
-      "updatedAt": "2026-11-24T14:20:00.000Z"
-    },
-    {
-      "id": "job-seed-3",
-      "planId": null,
-      "productId": "prod-lantern-bear-1",
-      "title": "The Lantern Bear — KDP Print Proof Assembly",
-      "stepType": "export",
-      "prompt": "Assemble 8.5×8.5 in full-bleed KDP interior PDF from ordered assets.",
-      "provider": "gemini",
-      "status": "queued",
-      "attempts": 0,
-      "maxAttempts": 3,
-      "resultAssetId": null,
-      "resultSummary": null,
-      "errorMessage": null,
-      "createdAt": "2026-11-24T14:25:00.000Z",
-      "updatedAt": "2026-11-24T14:25:00.000Z"
-    }
-  ],
+  "jobs": [],
   "exports": [
     {
-      "id": "exp-95b9833e",
-      "productId": "prod-lantern-bear-1",
-      "format": "pdf",
-      "fileName": "the-lantern-bear-and-the-firefly-brook-8.5x8.5-15afa6.pdf",
+      "id": "exp-8ba38a1d",
+      "productId": "prod-febf4e06",
+      "format": "png-bundle",
+      "fileName": "zebo-bundle-3e0704.zip",
       "trimSize": "8.5x8.5",
       "includeBleed": true,
-      "pageCount": 3,
-      "sizeBytes": 2172850,
-      "downloadUrl": "/api/export/download/the-lantern-bear-and-the-firefly-brook-8.5x8.5-15afa6.pdf",
+      "pageCount": 1,
+      "sizeBytes": 3003,
+      "downloadUrl": "/api/export/download/zebo-bundle-3e0704.zip",
       "driveFileId": null,
       "driveWebLink": null,
-      "createdAt": "2026-11-25T11:12:18.704Z"
-    }
-  ],
-  "tokens": [
+      "createdAt": "2026-11-25T12:23:15.156Z"
+    },
     {
-      "id": "tok-seed-apps-script",
-      "name": "Google Apps Script Job Poller",
-      "prefix": "fp_live_8c4e...",
-      "scope": "apps-script-trigger",
-      "tokenHash": "4283a0a7c1122f4de63d49c22b3b1e12b80841bef2dcb8beaacdd01dd926d2ee",
-      "createdAt": "2026-11-18T12:00:00.000Z",
-      "lastUsedAt": "2026-11-24T15:00:00.000Z"
+      "id": "exp-8684ca21",
+      "productId": "prod-febf4e06",
+      "format": "pdf",
+      "fileName": "zebo-8.5x8.5-0b4dea.pdf",
+      "trimSize": "8.5x8.5",
+      "includeBleed": true,
+      "pageCount": 2,
+      "sizeBytes": 135067,
+      "downloadUrl": "/api/export/download/zebo-8.5x8.5-0b4dea.pdf",
+      "driveFileId": null,
+      "driveWebLink": null,
+      "createdAt": "2026-11-25T12:23:00.538Z"
     }
   ],
+  "tokens": [],
   "trendScans": [
     {
-      "id": "scan-4fc42cd0",
-      "researched_at": "2026-11-25T12:00:07.467Z",
+      "id": "scan-e63aee81",
+      "researched_at": "2026-11-25T12:24:10.286Z",
       "provider": "openrouter",
       "model": "openai/gpt-4o-mini",
       "query": {
@@ -467,273 +302,190 @@
         "customTopic": "",
         "provider": "openrouter"
       },
-      "market_summary": "As of late November 2026, there is a significant surge in demand for seasonal products, particularly Christmas-themed items, across various marketplaces. Notably, children's picture books and coloring pages are experiencing heightened interest, with specific niches like Christmas coloring pages and emotional learning resources gaining traction. Additionally, digital wall art related to current trends, such as moon phases and dopamine decor, is also seeing increased attention.",
+      "market_summary": "As of late November 2026, the market for children's picture books, cozy coloring books, and printable wall art is experiencing significant demand, particularly with the upcoming holiday season. Notably, Christmas-themed products are gaining traction, while unique niches like cozy and dopamine decor prints are emerging as profitable opportunities for independent creators.",
       "opportunities": [
         {
-          "id": "opp-1-christmas-coloring-p",
-          "title": "Christmas Coloring Pages for Kids",
+          "id": "opp-1-christmas-cozy-color",
+          "title": "Christmas Cozy Coloring Pages",
           "product_type": "coloring-book",
           "marketplaces": [
-            "Etsy",
-            "Teachers Pay Teachers"
+            "Etsy"
           ],
           "opportunity_score": 90,
           "demand_level": "High",
           "competition_level": "Medium",
-          "price_range_usd": "$2.99 - $5.99",
+          "price_range_usd": "$3.00 - $5.00",
           "sales_evidence": {
             "observed_signals": [
-              "Etsy listings for 'Christmas coloring pages' increased by 60.1% to 75,893",
-              "Top 100 results show 48 new listings in the last month"
+              "Christmas coloring pages listings grew by 60.1% in the last month, with 48 of the top 100 results being new.",
+              "High attention on Etsy for Christmas-themed products."
             ],
-            "estimated_velocity": "Est. 300-500 units/mo for top listings based on observed demand signals",
+            "estimated_velocity": "Est. 300-500 units/mo for top listings based on observed trends.",
             "confidence": "High"
           },
-          "seasonality": "Seasonal (peak from late November to December)",
+          "seasonality": "Seasonal (peak window January 24 - February 23)",
           "buyer_pain_points": [
-            "Need for engaging holiday activities for children",
-            "Desire for affordable and printable entertainment options"
+            "Need for engaging holiday activities for children.",
+            "Desire for unique and creative holiday-themed gifts."
           ],
-          "winning_angle": "Unique designs that incorporate educational elements, such as counting or color recognition",
+          "winning_angle": "Focus on cozy themes with bold lines and simple designs that appeal to both children and adults.",
           "starter_blueprint": {
             "target_age_or_audience": "Ages 4-10",
             "suggested_trim_size": "8.5x11",
-            "suggested_page_count": 20,
-            "art_style_direction": "Whimsical and festive illustrations",
-            "hook_concept": "Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!",
+            "suggested_page_count": 30,
+            "art_style_direction": "Bold and easy designs with cozy winter scenes.",
+            "hook_concept": "Cozy Christmas coloring fun for the whole family!",
             "seed_keywords": [
               "Christmas coloring pages",
+              "cozy coloring book",
               "holiday activities for kids",
-              "printable Christmas crafts",
-              "educational coloring sheets",
-              "festive coloring book"
+              "winter coloring pages",
+              "easy Christmas crafts"
             ]
           },
           "sources": [
             {
-              "title": "Trending on Etsy Now: 90 Digital Niches Measured | Optimsy",
+              "title": "Trending on Etsy Now: 90 Digital Niches Measured",
               "url": "https://www.optimsy.com/en/blog/trending-on-etsy-digital-niches-november-2026"
             }
           ],
-          "created_project_id": "prod-479747f6",
-          "deep_dive": {
-            "researched_at": "2026-11-25T12:00:29.755Z",
-            "provider": "openrouter",
-            "model": "openai/gpt-4o-mini",
-            "summary": "The market for Christmas coloring pages for kids is vibrant, with a variety of listings on Etsy and Teachers Pay Teachers. Prices range from free to around $6.38, catering to parents and educators looking for festive activities for children aged 4-10. The competition includes both paid and free options, emphasizing the need for unique and engaging designs to stand out.",
-            "top_competing_listings": [
-              {
-                "title": "24 Christmas Coloring Pages for Kids, Printable Christmas Coloring Sheets, Santa Snowman Reindeer Elf, Holiday Activity PDF",
-                "marketplace": "Etsy",
-                "observed_price": "$2.99",
-                "observed_signal": "Instant download, 5-star reviews",
-                "url": "https://www.etsy.com/listing/4614930611/24-christmas-coloring-pages-for-kids"
-              },
-              {
-                "title": "25 Christmas Coloring Pages, Printable Kids Activities (PDF) - Etsy",
-                "marketplace": "Etsy",
-                "observed_price": "$1.93",
-                "observed_signal": "Star Seller, 5 out of 5 stars",
-                "url": "https://www.etsy.com/listing/1817001740/christmas-coloring-pages-christmas"
-              },
-              {
-                "title": "Christmas Coloring Pages, Christmas Coloring Sheets, Fun Winter Coloring Book activity",
-                "marketplace": "Etsy",
-                "observed_price": "$2.00",
-                "observed_signal": "100 pages, instant access",
-                "url": "https://www.etsy.com/listing/4607726020/christmas-coloring-pages-christmas"
-              },
-              {
-                "title": "Free Christmas Coloring Pages for Kids | Fun December Activities",
-                "marketplace": "Teachers Pay Teachers",
-                "observed_price": "FREE",
-                "observed_signal": "5 out of 5 stars, 2 reviews",
-                "url": "https://www.teacherspayteachers.com/Product/Free-Christmas-Coloring-Pages-for-Kids-Fun-December-Activities-14950118"
-              },
-              {
-                "title": "FREE Christmas Coloring Book for Kids | 18 Printable Holiday Coloring Pages",
-                "marketplace": "Teachers Pay Teachers",
-                "observed_price": "FREE",
-                "observed_signal": "5 out of 5 stars, 2 reviews",
-                "url": "https://www.teacherspayteachers.com/Product/FREE-Christmas-Coloring-Book-for-Kids-18-Printable-Holiday-Coloring-Pages-Wi-15019200"
-              }
-            ],
-            "price_ladder": {
-              "entry_tier": "$1.50 - $3.00 (basic printable pages)",
-              "mid_tier": "$4.00 - $6.00 (standard bundles)",
-              "premium_tier": "$6.99 - $9.99 (deluxe bundles or themed collections)",
-              "recommended_price": "$2.99 for a basic set / $4.99 for a larger bundle"
-            },
-            "recurring_buyer_complaints": [
-              "Pages are too simple or not engaging enough for older kids",
-              "Some designs are repetitive or lack variety",
-              "Quality of printouts can vary based on printer settings",
-              "Files are sometimes difficult to download or access"
-            ],
-            "high_intent_keywords": [
-              "Christmas coloring pages",
-              "holiday activities for kids",
-              "printable Christmas crafts",
-              "educational coloring sheets",
-              "festive coloring book",
-              "Christmas coloring activities",
-              "printable holiday coloring pages",
-              "kids Christmas crafts",
-              "Christmas coloring book for toddlers",
-              "easy Christmas coloring pages"
-            ],
-            "differentiation_angle": "Create a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.",
-            "sources": [
-              {
-                "title": "24 Christmas Coloring Pages for Kids",
-                "url": "https://www.etsy.com/listing/4614930611/24-christmas-coloring-pages-for-kids"
-              },
-              {
-                "title": "25 Christmas Coloring Pages, Printable Kids Activities",
-                "url": "https://www.etsy.com/listing/1817001740/christmas-coloring-pages-christmas"
-              },
-              {
-                "title": "Free Christmas Coloring Pages for Kids",
-                "url": "https://www.teacherspayteachers.com/Product/Free-Christmas-Coloring-Pages-for-Kids-Fun-December-Activities-14950118"
-              }
-            ]
-          }
+          "created_project_id": "prod-84e6f049"
         },
         {
-          "id": "opp-2-moon-phase-printable",
-          "title": "Moon Phase Printable Wall Art",
+          "id": "opp-2-dopamine-decor-print",
+          "title": "Dopamine Decor Printable Wall Art",
           "product_type": "wall-art",
           "marketplaces": [
             "Etsy"
           ],
           "opportunity_score": 88,
           "demand_level": "High",
-          "competition_level": "Low",
-          "price_range_usd": "$8.00 - $15.00",
+          "competition_level": "Medium",
+          "price_range_usd": "$2.00 - $10.00",
           "sales_evidence": {
             "observed_signals": [
-              "Moon phase prints saw a 33% increase in attention with 56 new listings in the top 100"
+              "Dopamine decor print listings increased by 4.2% with a notable rise in attention (+28%)."
             ],
-            "estimated_velocity": "Est. 150-300 units/mo for top listings based on observed demand signals",
+            "estimated_velocity": "Est. 200-400 units/mo for top listings based on observed trends.",
             "confidence": "High"
           },
           "seasonality": "Evergreen",
           "buyer_pain_points": [
-            "Desire for unique home decor that reflects personal interests",
-            "Need for affordable art that fits various aesthetics"
+            "Desire for unique home decor that reflects personal style.",
+            "Need for affordable art options."
           ],
-          "winning_angle": "Stylish designs that cater to astrology and nature lovers",
+          "winning_angle": "Create vibrant, colorful prints that resonate with the dopamine decor trend.",
           "starter_blueprint": {
             "target_age_or_audience": "Young adults and home decorators",
-            "suggested_trim_size": "16x20",
+            "suggested_trim_size": "8x10",
             "suggested_page_count": 1,
-            "art_style_direction": "Minimalist and modern",
-            "hook_concept": "Transform your space with beautiful moon phase art that resonates with your cosmic side!",
+            "art_style_direction": "Bright, colorful, and eclectic designs.",
+            "hook_concept": "Transform your space with joyful dopamine decor!",
             "seed_keywords": [
-              "moon phase print",
-              "astrology wall art",
-              "celestial decor",
-              "modern printable art",
-              "nature-inspired wall art"
+              "dopamine decor",
+              "colorful wall art",
+              "printable art",
+              "modern home decor",
+              "eclectic prints"
             ]
           },
           "sources": [
             {
-              "title": "Best Selling Wall Art on Etsy: 30 Styles Measured | Optimsy",
-              "url": "https://www.optimsy.com/en/blog/best-selling-wall-art-on-etsy"
+              "title": "Etsy Niches With Low Competition: 20 We Measured",
+              "url": "https://www.optimsy.com/en/blog/etsy-niches-with-low-competition"
             }
           ],
           "created_project_id": null
         },
         {
-          "id": "opp-3-social-emotional-lea",
-          "title": "Social Emotional Learning (SEL) Resources for Teachers",
-          "product_type": "flashcards",
-          "marketplaces": [
-            "Teachers Pay Teachers"
-          ],
-          "opportunity_score": 85,
-          "demand_level": "High",
-          "competition_level": "Medium",
-          "price_range_usd": "$5.00 - $15.00",
-          "sales_evidence": {
-            "observed_signals": [
-              "TPT's trending resources include SEL materials for classroom culture and behavior support"
-            ],
-            "estimated_velocity": "Est. 200-400 units/mo for top listings based on observed demand signals",
-            "confidence": "High"
-          },
-          "seasonality": "Evergreen",
-          "buyer_pain_points": [
-            "Need for effective tools to support student mental health",
-            "Desire for engaging and practical classroom resources"
-          ],
-          "winning_angle": "Interactive and visually appealing materials that facilitate emotional learning",
-          "starter_blueprint": {
-            "target_age_or_audience": "Grades K-5",
-            "suggested_trim_size": "8.5x11",
-            "suggested_page_count": 30,
-            "art_style_direction": "Bright and engaging illustrations",
-            "hook_concept": "Empower your students with fun and interactive SEL resources that promote emotional intelligence!",
-            "seed_keywords": [
-              "SEL resources",
-              "social emotional learning activities",
-              "classroom behavior tools",
-              "emotional intelligence flashcards",
-              "kindness activities"
-            ]
-          },
-          "sources": [
-            {
-              "title": "TPT Trends 2026: What Resource Types Are Selling Right Now",
-              "url": "https://www.spylore.com/blog/tpt-trends-2026-resource-types-selling"
-            }
-          ],
-          "created_project_id": null
-        },
-        {
-          "id": "opp-4-anxiety-relief-color",
-          "title": "Anxiety Relief Coloring Book for Kids",
+          "id": "opp-3-cozy-coloring-pages-",
+          "title": "Cozy Coloring Pages for Seniors",
           "product_type": "coloring-book",
           "marketplaces": [
             "Amazon KDP",
-            "Teachers Pay Teachers"
+            "Etsy"
           ],
-          "opportunity_score": 84,
-          "demand_level": "Emerging",
+          "opportunity_score": 85,
+          "demand_level": "Medium",
           "competition_level": "Low",
           "price_range_usd": "$4.99 - $9.99",
           "sales_evidence": {
             "observed_signals": [
-              "Anxiety relief coloring books have a lower listing count with increasing interest"
+              "Growing interest in cozy themes with simple designs suitable for seniors."
             ],
-            "estimated_velocity": "Est. 100-200 units/mo for top listings based on observed demand signals",
+            "estimated_velocity": "Est. 150-300 units/mo for top listings based on observed trends.",
             "confidence": "Medium"
           },
           "seasonality": "Evergreen",
           "buyer_pain_points": [
-            "Need for tools to help children manage anxiety",
-            "Desire for creative outlets that promote relaxation"
+            "Need for relaxing activities that are easy to engage with.",
+            "Desire for art that is not overly intricate."
           ],
-          "winning_angle": "Unique themes that incorporate mindfulness and relaxation techniques",
+          "winning_angle": "Focus on large, simple designs that evoke a sense of calm and nostalgia.",
           "starter_blueprint": {
-            "target_age_or_audience": "Ages 5-12",
+            "target_age_or_audience": "Seniors",
             "suggested_trim_size": "8.5x11",
-            "suggested_page_count": 30,
-            "art_style_direction": "Calming and soothing illustrations",
-            "hook_concept": "Help your child unwind with a fun and therapeutic coloring book designed for anxiety relief!",
+            "suggested_page_count": 40,
+            "art_style_direction": "Bold outlines with cozy, familiar scenes.",
+            "hook_concept": "Relax and unwind with cozy coloring pages designed for seniors!",
             "seed_keywords": [
-              "anxiety relief coloring book",
-              "mindfulness activities for kids",
-              "therapeutic coloring pages",
-              "stress relief for children",
-              "relaxation techniques for kids"
+              "cozy coloring pages",
+              "easy coloring for seniors",
+              "relaxing coloring book",
+              "large print coloring",
+              "simple designs for adults"
             ]
           },
           "sources": [
             {
-              "title": "Digital Products to Sell in 2026: What Etsy Search Shows",
-              "url": "https://www.optimsy.com/en/blog/digital-products-to-sell"
+              "title": "Cozy Coloring Pages: A Niche That Sells on Amazon & Etsy",
+              "url": "https://inkchamps.com/blog/cozy-coloring-pages-niche-amazon-etsy/"
+            }
+          ],
+          "created_project_id": null
+        },
+        {
+          "id": "opp-4-animal-themed-hidden",
+          "title": "Animal-Themed Hidden Picture Books",
+          "product_type": "childrens-book",
+          "marketplaces": [
+            "Amazon KDP"
+          ],
+          "opportunity_score": 84,
+          "demand_level": "High",
+          "competition_level": "Medium",
+          "price_range_usd": "$6.99 - $12.99",
+          "sales_evidence": {
+            "observed_signals": [
+              "Best sellers in children's hidden picture books include animal themes, indicating strong interest."
+            ],
+            "estimated_velocity": "Est. 200-350 units/mo for top listings based on observed trends.",
+            "confidence": "High"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Need for engaging and educational activities for children.",
+            "Desire for interactive reading experiences."
+          ],
+          "winning_angle": "Combine educational content with fun hidden picture challenges featuring popular animals.",
+          "starter_blueprint": {
+            "target_age_or_audience": "Ages 3-7",
+            "suggested_trim_size": "8.5x8.5",
+            "suggested_page_count": 32,
+            "art_style_direction": "Colorful illustrations with hidden objects.",
+            "hook_concept": "Explore and discover with fun hidden picture adventures featuring beloved animals!",
+            "seed_keywords": [
+              "hidden picture books",
+              "animal activity books",
+              "interactive children's books",
+              "educational fun",
+              "search and find books"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Amazon Best Sellers: Best Children's Hidden Picture Books",
+              "url": "https://www.amazon.com/Best-Sellers-Children's-Hidden-Picture-Books/zgbs/books/3379"
             }
           ],
           "created_project_id": null
@@ -746,86 +498,86 @@
             "Etsy"
           ],
           "opportunity_score": 82,
-          "demand_level": "Emerging",
+          "demand_level": "Medium",
           "competition_level": "Medium",
           "price_range_usd": "$3.00 - $6.00",
           "sales_evidence": {
             "observed_signals": [
-              "Kawaii coloring pages saw a 10.2% increase in listings with rising attention"
+              "Kawaii coloring pages have seen a 10.2% increase in listings and attention on Etsy."
             ],
-            "estimated_velocity": "Est. 150-250 units/mo for top listings based on observed demand signals",
+            "estimated_velocity": "Est. 150-250 units/mo for top listings based on observed trends.",
             "confidence": "Medium"
           },
           "seasonality": "Evergreen",
           "buyer_pain_points": [
-            "Desire for cute and engaging art for children",
-            "Need for affordable and printable entertainment options"
+            "Need for fun and engaging activities for children.",
+            "Desire for cute and appealing art styles."
           ],
-          "winning_angle": "Charming designs that appeal to children and parents alike",
+          "winning_angle": "Focus on adorable characters and simple designs that appeal to young children.",
           "starter_blueprint": {
-            "target_age_or_audience": "Ages 4-10",
+            "target_age_or_audience": "Ages 4-8",
             "suggested_trim_size": "8.5x11",
-            "suggested_page_count": 20,
-            "art_style_direction": "Cute and colorful illustrations",
-            "hook_concept": "Delight your little ones with adorable kawaii coloring pages that spark creativity and joy!",
+            "suggested_page_count": 30,
+            "art_style_direction": "Cute, colorful, and whimsical designs.",
+            "hook_concept": "Bring joy with adorable kawaii coloring pages for kids!",
             "seed_keywords": [
               "kawaii coloring pages",
-              "cute printable art",
-              "adorable coloring sheets",
-              "fun coloring activities",
-              "children's art projects"
+              "cute coloring book",
+              "fun activities for kids",
+              "adorable art for children",
+              "easy coloring for preschoolers"
             ]
           },
           "sources": [
             {
-              "title": "Trending on Etsy Now: 90 Digital Niches Measured | Optimsy",
+              "title": "Trending on Etsy Now: 90 Digital Niches Measured",
               "url": "https://www.optimsy.com/en/blog/trending-on-etsy-digital-niches-november-2026"
             }
           ],
           "created_project_id": null
         },
         {
-          "id": "opp-6-dopamine-decor-print",
-          "title": "Dopamine Decor Print",
+          "id": "opp-6-animal-themed-printa",
+          "title": "Animal-Themed Printable Stickers",
           "product_type": "wall-art",
           "marketplaces": [
             "Etsy"
           ],
           "opportunity_score": 80,
-          "demand_level": "Emerging",
+          "demand_level": "Medium",
           "competition_level": "Low",
-          "price_range_usd": "$5.00 - $12.00",
+          "price_range_usd": "$2.00 - $5.00",
           "sales_evidence": {
             "observed_signals": [
-              "Dopamine decor prints increased in attention with 13 new listings in the top 100"
+              "Animal-themed stickers are trending with a significant increase in attention on Etsy."
             ],
-            "estimated_velocity": "Est. 100-200 units/mo for top listings based on observed demand signals",
+            "estimated_velocity": "Est. 100-200 units/mo for top listings based on observed trends.",
             "confidence": "Medium"
           },
           "seasonality": "Evergreen",
           "buyer_pain_points": [
-            "Desire for uplifting and motivational home decor",
-            "Need for affordable art that enhances mental well-being"
+            "Need for unique and fun stickers for personalizing items.",
+            "Desire for affordable and cute decorative options."
           ],
-          "winning_angle": "Positive affirmations and vibrant designs that resonate with buyers",
+          "winning_angle": "Create a variety of cute animal stickers that appeal to both children and adults.",
           "starter_blueprint": {
-            "target_age_or_audience": "Young adults and home decorators",
-            "suggested_trim_size": "8x10",
+            "target_age_or_audience": "All ages",
+            "suggested_trim_size": "Varies",
             "suggested_page_count": 1,
-            "art_style_direction": "Bright and colorful typography",
-            "hook_concept": "Elevate your space with vibrant dopamine decor prints that inspire positivity and joy!",
+            "art_style_direction": "Cute and colorful animal designs.",
+            "hook_concept": "Add a touch of fun to your life with adorable animal stickers!",
             "seed_keywords": [
-              "dopamine decor print",
-              "motivational wall art",
-              "positive affirmation poster",
-              "uplifting home decor",
-              "colorful printable art"
+              "animal stickers",
+              "printable stickers",
+              "cute stickers for kids",
+              "fun decorative stickers",
+              "affordable art"
             ]
           },
           "sources": [
             {
-              "title": "Best Selling Wall Art on Etsy: 30 Styles Measured | Optimsy",
-              "url": "https://www.optimsy.com/en/blog/best-selling-wall-art-on-etsy"
+              "title": "Top Sellers Digital Printables - Etsy",
+              "url": "https://www.etsy.com/market/top_sellers_digital_printables"
             }
           ],
           "created_project_id": null

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Copy, ImagePlus, FileText, Wand2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Copy, FileText, ImagePlus, Sparkles, Upload, Wand2, X } from 'lucide-react';
 import type {
   GenerationMode,
   GenerationProvider,
@@ -16,7 +16,9 @@ interface GenerationViewProps {
   generations: GenerationRecord[];
   settings: WorkspaceSettings;
   activeProductId: string | null;
+  initialMode?: GenerationMode;
   onSelectProduct: (id: string) => void;
+  onQuickCreateProduct: (title: string) => Promise<Product>;
   onGenerateText: (payload: {
     productId: string;
     prompt: string;
@@ -31,14 +33,59 @@ interface GenerationViewProps {
     stylePreset: string;
     provider: GenerationProvider;
     kind: StorageAsset['kind'];
+    openRouterModel?: string;
+    referenceImageDataUrl?: string;
+    referenceAssetId?: string;
+    saveReferenceToProduct?: boolean;
+    referenceFileName?: string;
   }) => Promise<void>;
 }
 
 const STYLE_PRESETS = [
-  'Hand-painted gouache picture book illustration on warm cold-press watercolor paper',
-  'Crisp black-and-white fine ink line art coloring page, clean white background',
-  'Vintage archival botanical print, delicate ink linework and muted sage watercolor washes',
-  'Paper-cut storybook collage with soft atmospheric shadows and warm golden twilight light',
+  {
+    label: '3D Animated Storybook Cartoon',
+    value:
+      '3D Animated Storybook Cartoon — expressive charming character, soft warm lighting, Pixar-inspired children’s picture book illustration',
+  },
+  {
+    label: '2D Classic Cartoon Character',
+    value:
+      '2D Classic Cartoon Character — bold clean ink outlines, vibrant playful colors, expressive storybook charm',
+  },
+  {
+    label: 'Hand-Painted Gouache Picture Book',
+    value:
+      'Hand-painted gouache picture book illustration on warm cold-press watercolor paper, editorial storybook warmth',
+  },
+  {
+    label: 'Bold & Easy Coloring Book Line Art',
+    value:
+      'Crisp black-and-white bold ink line art coloring page on pure white background, clean unshaded spaces ready for coloring',
+  },
+  {
+    label: 'Vintage Archival Portrait & Botanical Print',
+    value:
+      'Vintage archival storybook print, delicate ink linework and muted watercolor washes suitable for framed wall art',
+  },
+];
+
+const OPENROUTER_IMAGE_MODELS = [
+  {
+    id: 'google/gemini-2.5-flash-image',
+    label: 'google/gemini-2.5-flash-image (Fast Photo-to-Cartoon)',
+  },
+  {
+    id: 'openai/gpt-5-image-mini',
+    label: 'openai/gpt-5-image-mini (Cartoon & Storybook)',
+  },
+  {
+    id: 'openai/gpt-5-image',
+    label: 'openai/gpt-5-image (High Detail)',
+  },
+  {
+    id: 'google/gemini-3.1-flash-image-preview',
+    label: 'google/gemini-3.1-flash-image-preview',
+  },
 ];
 
 export function GenerationView({
@@ -47,54 +94,152 @@ export function GenerationView({
   generations,
   settings,
   activeProductId,
+  initialMode,
   onSelectProduct,
+  onQuickCreateProduct,
   onGenerateText,
   onGenerateIllustration,
 }: GenerationViewProps) {
   const productId = activeProductId || products[0]?.id || '';
-  const [mode, setMode] = useState<GenerationMode>('manuscript');
-  const [provider, setProvider] = useState<GenerationProvider>('gemini');
-  const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o-mini');
-  const [stylePreset, setStylePreset] = useState(STYLE_PRESETS[0]);
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === productId) ?? null,
+    [products, productId]
+  );
+
+  const [mode, setMode] = useState<GenerationMode>(initialMode ?? 'illustration');
+  const [provider, setProvider] = useState<GenerationProvider>(
+    settings.openRouterConfigured ? 'openrouter' : 'gemini'
+  );
+  const [openRouterTextModel, setOpenRouterTextModel] = useState('openai/gpt-4o-mini');
+  const [openRouterImageModel, setOpenRouterImageModel] = useState(OPENROUTER_IMAGE_MODELS[0].id);
+  const [stylePreset, setStylePreset] = useState(STYLE_PRESETS[0].value);
   const [assetKind, setAssetKind] = useState<StorageAsset['kind']>('illustration');
   const [saveToManuscript, setSaveToManuscript] = useState(true);
-  const [prompt, setPrompt] = useState(
-    'Write Spreads 3 and 4 for a calming bedtime picture book where Barnaby the bear and a red fox follow glowing fireflies to a willow tree harbor.'
-  );
+  const [prompt, setPrompt] = useState('');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [copiedGenId, setCopiedGenId] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!productId) {
-      setError('Create or select a product first.');
+  // Inline new product creation when workspace starts empty (or when toggled)
+  const [creatingNewProduct, setCreatingNewProduct] = useState(false);
+  const [newProductTitle, setNewProductTitle] = useState('');
+
+  // Photo-to-Cartoon / Reference Image upload state
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedPhoto, setUploadedPhoto] = useState<{
+    name: string;
+    mimeType: string;
+    dataUrl: string;
+  } | null>(null);
+  const [useSavedReference, setUseSavedReference] = useState(true);
+  const [saveReferenceToProduct, setSaveReferenceToProduct] = useState(true);
+
+  useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode);
+      if (initialMode === 'illustration' && settings.openRouterConfigured) {
+        setProvider('openrouter');
+      }
+    }
+  }, [initialMode, settings.openRouterConfigured]);
+
+  const savedReferenceAsset = useMemo(() => {
+    if (!selectedProduct) return null;
+    if (selectedProduct.referenceAssetId) {
+      const exact = assets.find((a) => a.id === selectedProduct.referenceAssetId);
+      if (exact) return exact;
+    }
+    return assets.find((a) => a.productId === selectedProduct.id && a.kind === 'reference') ?? null;
+  }, [selectedProduct, assets]);
+
+  // Reset per-product reference toggle when switching products
+  useEffect(() => {
+    setUseSavedReference(true);
+  }, [productId]);
+
+  const showNewProductInput = products.length === 0 || creatingNewProduct;
+  const hasActiveReference = Boolean(uploadedPhoto || (savedReferenceAsset && useSavedReference));
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('Upload a PNG, JPEG, or WebP photo for image generation.');
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Uploaded photo must be under 10 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setUploadedPhoto({
+        name: file.name,
+        mimeType: file.type,
+        dataUrl: String(reader.result),
+      });
+    };
+    reader.onerror = () => {
+      setError('Could not read the selected image file.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (prompt.trim().length < 5) {
       setError('Enter a descriptive prompt of at least 5 characters.');
+      return;
+    }
+
+    let targetProductId = productId;
+    if (showNewProductInput) {
+      if (newProductTitle.trim().length < 2) {
+        setError('Enter a product title (at least 2 characters) to save your generated output.');
+        return;
+      }
+    } else if (!targetProductId) {
+      setError('Select or create a product first.');
       return;
     }
 
     setError('');
     setRunning(true);
     try {
+      if (showNewProductInput) {
+        const created = await onQuickCreateProduct(newProductTitle.trim());
+        targetProductId = created.id;
+        setCreatingNewProduct(false);
+        setNewProductTitle('');
+      }
+
       if (mode === 'illustration') {
         await onGenerateIllustration({
-          productId,
+          productId: targetProductId,
           prompt: prompt.trim(),
           stylePreset,
           provider,
           kind: assetKind,
+          openRouterModel: provider === 'openrouter' ? openRouterImageModel : undefined,
+          referenceImageDataUrl: uploadedPhoto?.dataUrl,
+          referenceFileName: uploadedPhoto?.name,
+          referenceAssetId:
+            !uploadedPhoto && useSavedReference && savedReferenceAsset
+              ? savedReferenceAsset.id
+              : undefined,
+          saveReferenceToProduct: Boolean(uploadedPhoto && saveReferenceToProduct),
         });
       } else {
         await onGenerateText({
-          productId,
+          productId: targetProductId,
           prompt: prompt.trim(),
           mode,
           provider,
           saveToManuscript,
-          openRouterModel,
+          openRouterModel: provider === 'openrouter' ? openRouterTextModel : undefined,
         });
       }
     } catch (err) {
@@ -116,30 +261,63 @@ export function GenerationView({
           <div>
             <h2 className="text-base font-semibold text-slate-900">AI Prompt Studio</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Server-side API routes keep provider keys off the browser.
+              Generate copy, KDP metadata, or photo-to-cartoon illustrations via OpenRouter.
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {/* Target Product (supports inline creation when empty) */}
           <div>
-            <label htmlFor="gen-product" className="block text-xs font-medium text-slate-700">
-              Target Product
-            </label>
-            <select
-              id="gen-product"
-              value={productId}
-              onChange={(e) => onSelectProduct(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
-            >
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title} ({p.trimSize}&quot;)
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor={showNewProductInput ? 'gen-new-product' : 'gen-product'}
+                className="block text-xs font-medium text-slate-700"
+              >
+                {showNewProductInput ? 'New Product Title' : 'Target Product'}
+              </label>
+              {products.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingNewProduct((prev) => !prev)}
+                  className="text-xs font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+                >
+                  {creatingNewProduct ? 'Choose existing' : '+ New product'}
+                </button>
+              )}
+            </div>
+
+            {showNewProductInput ? (
+              <div className="mt-1">
+                <input
+                  id="gen-new-product"
+                  type="text"
+                  value={newProductTitle}
+                  onChange={(e) => setNewProductTitle(e.target.value)}
+                  placeholder="e.g., Zebo The Dog"
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Creates this product and its storage folder automatically when you generate.
+                </p>
+              </div>
+            ) : (
+              <select
+                id="gen-product"
+                value={productId}
+                onChange={(e) => onSelectProduct(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
+              >
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title} ({p.trimSize}&quot;)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
+          {/* Output Mode Tabs */}
           <div>
             <span className="block text-xs font-medium text-slate-700">Output Mode</span>
             <div
@@ -149,9 +327,9 @@ export function GenerationView({
             >
               {(
                 [
+                  ['illustration', 'Image / Cartoon'],
                   ['manuscript', 'Story Copy'],
                   ['kdp-metadata', 'KDP Metadata'],
-                  ['illustration', 'Illustration'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -159,14 +337,8 @@ export function GenerationView({
                   type="button"
                   onClick={() => {
                     setMode(value);
-                    if (value === 'illustration') {
-                      setPrompt(
-                        'A warm woodland lantern bear and a red fox standing on mossy stepping stones beside a twilight river filled with floating origami paper boats.'
-                      );
-                    } else if (value === 'kdp-metadata') {
-                      setPrompt(
-                        'Write an engaging Amazon KDP book description, subtitle options, and 7 high-intent backend keyword phrases.'
-                      );
+                    if (value === 'illustration' && settings.openRouterConfigured) {
+                      setProvider('openrouter');
                     }
                   }}
                   className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
@@ -181,7 +353,8 @@ export function GenerationView({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Provider & Model Row */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="gen-provider" className="block text-xs font-medium text-slate-700">
                 Server Provider Route
@@ -192,14 +365,34 @@ export function GenerationView({
                 onChange={(e) => setProvider(e.target.value as GenerationProvider)}
                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-blue-700 focus:outline-none"
               >
-                <option value="gemini">Gemini 4 Hydrogen (Active)</option>
                 <option value="openrouter">
-                  OpenRouter {settings.openRouterConfigured ? '(Configured)' : '(Requires Env Key)'}
+                  OpenRouter API {settings.openRouterConfigured ? '(Active)' : '(Needs Key)'}
+                </option>
+                <option value="gemini">
+                  Gemini 4 Hydrogen {mode === 'illustration' ? '(Vector SVG)' : '(Active)'}
                 </option>
               </select>
             </div>
 
-            {provider === 'openrouter' ? (
+            {provider === 'openrouter' && mode === 'illustration' ? (
+              <div>
+                <label htmlFor="or-img-model" className="block text-xs font-medium text-slate-700">
+                  OpenRouter Image Model
+                </label>
+                <select
+                  id="or-img-model"
+                  value={openRouterImageModel}
+                  onChange={(e) => setOpenRouterImageModel(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-700 focus:outline-none"
+                >
+                  {OPENROUTER_IMAGE_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : provider === 'openrouter' ? (
               <div>
                 <label htmlFor="or-model" className="block text-xs font-medium text-slate-700">
                   OpenRouter Model ID
@@ -207,8 +400,8 @@ export function GenerationView({
                 <input
                   id="or-model"
                   type="text"
-                  value={openRouterModel}
-                  onChange={(e) => setOpenRouterModel(e.target.value)}
+                  value={openRouterTextModel}
+                  onChange={(e) => setOpenRouterTextModel(e.target.value)}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-700 focus:outline-none"
                 />
               </div>
@@ -242,42 +435,201 @@ export function GenerationView({
             )}
           </div>
 
+          {/* Illustration-specific options: Reference Photo Upload + Style Preset + Asset Kind */}
           {mode === 'illustration' && (
-            <div>
-              <label htmlFor="gen-style" className="block text-xs font-medium text-slate-700">
-                Art Direction Preset
-              </label>
-              <select
-                id="gen-style"
-                value={stylePreset}
-                onChange={(e) => setStylePreset(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:border-blue-700 focus:outline-none"
-              >
-                {STYLE_PRESETS.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {preset.slice(0, 74)}…
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-slate-800">
+                    Reference Photo (Optional — Photo to Cartoon / Illustration)
+                  </span>
+                  {uploadedPhoto && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadedPhoto(null);
+                        if (photoInputRef.current) photoInputRef.current.value = '';
+                      }}
+                      aria-label="Remove uploaded reference photo"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:text-red-800 whitespace-nowrap"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  ref={photoInputRef}
+                  id="gen-ref-photo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+
+                {uploadedPhoto ? (
+                  <div className="mt-2.5 space-y-2.5">
+                    <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white p-2.5">
+                      <img
+                        src={uploadedPhoto.dataUrl}
+                        alt="Uploaded reference photo preview"
+                        className="h-16 w-16 shrink-0 rounded border border-slate-200 object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium text-slate-900">
+                          {uploadedPhoto.name}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          AI will transform this photo into the selected cartoon or illustration style.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => photoInputRef.current?.click()}
+                          className="mt-1 text-xs font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          Replace photo
+                        </button>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={saveReferenceToProduct}
+                        onChange={(e) => setSaveReferenceToProduct(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-700"
+                      />
+                      Save as product reference photo for future pages
+                    </label>
+                  </div>
+                ) : savedReferenceAsset && useSavedReference ? (
+                  <div className="mt-2.5 flex items-center gap-3 rounded-md border border-blue-200 bg-white p-2.5">
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-50">
+                      <AssetPreviewImage
+                        src={savedReferenceAsset.url}
+                        alt="Saved product reference photo"
+                        fallbackLabel="Photo"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-slate-900">
+                        Using saved product photo
+                      </div>
+                      <div className="truncate font-mono text-[11px] text-slate-500">
+                        {savedReferenceAsset.name}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => photoInputRef.current?.click()}
+                          className="text-xs font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          Upload new photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setUseSavedReference(false)}
+                          className="text-xs text-slate-500 hover:text-slate-800"
+                        >
+                          Text-only instead
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2.5 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2.5 text-xs font-medium text-slate-700 transition-colors hover:border-blue-600 hover:bg-blue-50/30 hover:text-blue-800"
+                    >
+                      <Upload className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                      Upload Reference Photo (PNG, JPEG, WebP)
+                    </button>
+                    {savedReferenceAsset && !useSavedReference && (
+                      <button
+                        type="button"
+                        onClick={() => setUseSavedReference(true)}
+                        className="text-xs font-medium text-blue-700 hover:text-blue-800"
+                      >
+                        Re-attach saved product photo ({savedReferenceAsset.name})
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="sm:col-span-2">
+                  <label htmlFor="gen-style" className="block text-xs font-medium text-slate-700">
+                    Cartoon / Art Direction Preset
+                  </label>
+                  <select
+                    id="gen-style"
+                    value={stylePreset}
+                    onChange={(e) => setStylePreset(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:border-blue-700 focus:outline-none"
+                  >
+                    {STYLE_PRESETS.map((preset) => (
+                      <option key={preset.label} value={preset.value}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {provider === 'openrouter' && (
+                  <div>
+                    <label
+                      htmlFor="gen-asset-kind-or"
+                      className="block text-xs font-medium text-slate-700"
+                    >
+                      Save Asset As
+                    </label>
+                    <select
+                      id="gen-asset-kind-or"
+                      value={assetKind}
+                      onChange={(e) => setAssetKind(e.target.value as StorageAsset['kind'])}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800"
+                    >
+                      <option value="illustration">Illustration</option>
+                      <option value="cover">Front Cover</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           <div>
             <label htmlFor="gen-prompt" className="block text-xs font-medium text-slate-700">
-              Prompt
+              {mode === 'illustration' && hasActiveReference
+                ? 'Cartoon / Scene Instructions (based on your uploaded photo)'
+                : 'Prompt'}
             </label>
             <textarea
               id="gen-prompt"
-              rows={5}
+              rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the book spread, illustration scene, or KDP listing goals…"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-relaxed text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-700/15"
+              placeholder={
+                mode === 'illustration'
+                  ? hasActiveReference
+                    ? 'e.g., Turn this dog into a joyful cartoon character wearing a red bandana, playing in a sunny backyard meadow for a children’s book cover…'
+                    : 'Describe the illustration or cartoon scene you want OpenRouter to create…'
+                  : mode === 'kdp-metadata'
+                    ? 'Ask for an Amazon KDP book description, subtitle ideas, and 7 high-intent keyword phrases…'
+                    : 'Describe the chapter, story spread, or page copy to draft…'
+              }
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-700/15"
             />
           </div>
 
           {error && (
-            <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+            >
               {error}
             </p>
           )}
@@ -288,15 +640,23 @@ export function GenerationView({
             className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap shrink-0"
           >
             {mode === 'illustration' ? (
-              <ImagePlus className="h-4 w-4" aria-hidden="true" />
+              hasActiveReference ? (
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <ImagePlus className="h-4 w-4" aria-hidden="true" />
+              )
             ) : (
               <Wand2 className="h-4 w-4" aria-hidden="true" />
             )}
             {running
-              ? 'Generating via server route…'
+              ? mode === 'illustration'
+                ? 'Generating image via OpenRouter…'
+                : 'Generating via server route…'
               : mode === 'illustration'
-              ? 'Generate Illustration & Save to Folder'
-              : 'Generate Copy'}
+                ? hasActiveReference
+                  ? 'Generate Cartoon / Illustration from Photo'
+                  : 'Generate Illustration & Save to Folder'
+                : 'Generate Copy'}
           </button>
         </form>
       </section>
@@ -318,7 +678,7 @@ export function GenerationView({
             <FileText className="mx-auto h-7 w-7 text-slate-300" aria-hidden="true" />
             <p className="mt-3 text-sm font-medium text-slate-900">No generations yet</p>
             <p className="mt-1 text-xs text-slate-500">
-              Run a manuscript, KDP metadata, or illustration prompt on the left.
+              Upload a photo on the left to generate a cartoon or storybook illustration via OpenRouter, or draft story copy.
             </p>
           </div>
         ) : (
@@ -368,8 +728,8 @@ export function GenerationView({
                   )}
 
                   {linkedAsset && (
-                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <div className="h-44 w-44 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="h-52 w-52 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
                         <AssetPreviewImage
                           src={linkedAsset.url}
                           alt={linkedAsset.caption || linkedAsset.name}
@@ -377,11 +737,18 @@ export function GenerationView({
                           className="h-full w-full object-contain"
                         />
                       </div>
-                      <div className="text-xs text-slate-600">
+                      <div className="space-y-1.5 text-xs text-slate-600">
                         <div className="font-mono font-medium text-slate-900">
                           {linkedAsset.name}
                         </div>
-                        <p className="mt-1">Saved to product storage folder and ready for KDP PDF export.</p>
+                        <p>Saved to product storage folder and ready for KDP PDF export.</p>
+                        <a
+                          href={linkedAsset.url}
+                          download={linkedAsset.name}
+                          className="inline-block font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          Download image
+                        </a>
                       </div>
                     </div>
                   )}

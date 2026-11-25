@@ -13,7 +13,13 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
-import type { ModuleId, WorkspaceSnapshot } from './types/workspace';
+import type {
+  GenerationMode,
+  KdpTrimSize,
+  ModuleId,
+  ProductCategory,
+  WorkspaceSnapshot,
+} from './types/workspace';
 import { workspaceApi } from './lib/api';
 import {
   getWorkspaceAccessToken,
@@ -69,6 +75,7 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showNewProductModal, setShowNewProductModal] = useState(false);
+  const [generationInitialMode, setGenerationInitialMode] = useState<GenerationMode>('illustration');
 
   // Google Workspace auth state (token strictly in-memory via googleAuth.ts)
   const [googleUser, setGoogleUser] = useState<User | null>(null);
@@ -249,6 +256,35 @@ export default function App() {
     setActiveModule(module);
   };
 
+  const openIllustrationForProduct = (productId: string) => {
+    setActiveProductId(productId);
+    setGenerationInitialMode('illustration');
+    setActiveModule('generation');
+  };
+
+  const handleQuickCreateProduct = async (opts: {
+    title: string;
+    category?: ProductCategory;
+    trimSize?: KdpTrimSize;
+    pageCount?: number;
+  }) => {
+    const { product } = await workspaceApi.createProduct({
+      title: opts.title,
+      subtitle: '',
+      category: opts.category ?? 'childrens-book',
+      status: 'draft',
+      trimSize: opts.trimSize ?? '8.5x8.5',
+      pageCount: opts.pageCount ?? 24,
+      includeBleed: true,
+      seriesId: null,
+      isbn: '',
+      manuscriptNotes: '',
+    });
+    await refreshWorkspace();
+    setActiveProductId(product.id);
+    return product;
+  };
+
   const renderPrimaryHeaderAction = () => {
     if (activeModule === 'library') {
       return (
@@ -345,7 +381,7 @@ export default function App() {
 
         <div className="border-t border-slate-200 p-4 text-xs">
           <div className="font-medium text-slate-800">
-            {workspace?.settings.authorImprint ?? 'Northwood Picture Press'}
+            {workspace?.settings.authorImprint ?? 'FolioPress Studio'}
           </div>
           <div className="mt-1 text-slate-500">
             {googleConnected
@@ -481,13 +517,31 @@ export default function App() {
                   onCloseNewProductModal={() => setShowNewProductModal(false)}
                   onOpenNewProductModal={() => setShowNewProductModal(true)}
                   onOpenModuleForProduct={openModuleForProduct}
+                  onOpenIllustrationForProduct={openIllustrationForProduct}
                   onBootstrapGoogleSheet={handleBootstrapGoogleSheet}
                   onSyncGoogleSheets={handleSyncGoogleSheets}
                   onCreateProduct={async (payload) => {
-                    const { product } = await workspaceApi.createProduct(payload);
+                    const { product, referenceAsset } = await workspaceApi.createProduct(payload);
                     await refreshWorkspace();
                     setActiveProductId(product.id);
-                    showNotice(`Created "${product.title}" and initialized product storage folder.`);
+                    showNotice(
+                      referenceAsset
+                        ? `Created "${product.title}" with attached reference photo — ready for cartoon generation.`
+                        : `Created "${product.title}" and initialized product storage folder.`
+                    );
+                    return product;
+                  }}
+                  onUploadReferencePhoto={async (payload) => {
+                    await workspaceApi.uploadAsset({
+                      productId: payload.productId,
+                      name: payload.name,
+                      mimeType: payload.mimeType,
+                      dataUrl: payload.dataUrl,
+                      kind: 'reference',
+                      caption: 'Reference photo for AI cartoon & illustration generation',
+                    });
+                    await refreshWorkspace();
+                    showNotice('Reference photo attached — ready to generate cartoons via OpenRouter.');
                   }}
                   onUpdateProduct={async (id, payload) => {
                     await workspaceApi.updateProduct(id, payload);
@@ -575,7 +629,9 @@ export default function App() {
                   generations={workspace.generations}
                   settings={workspace.settings}
                   activeProductId={activeProductId}
+                  initialMode={generationInitialMode}
                   onSelectProduct={setActiveProductId}
+                  onQuickCreateProduct={(title) => handleQuickCreateProduct({ title })}
                   onGenerateText={async (payload) => {
                     await workspaceApi.generateText(payload);
                     await refreshWorkspace();
@@ -595,6 +651,7 @@ export default function App() {
                   plans={workspace.plans}
                   activeProductId={activeProductId}
                   onSelectProduct={setActiveProductId}
+                  onQuickCreateProduct={(opts) => handleQuickCreateProduct(opts)}
                   onGenerateOutline={async (payload) => {
                     const { steps } = await workspaceApi.generateOutline(payload);
                     showNotice(`Drafted ${steps.length} production steps with AI.`);
@@ -606,7 +663,10 @@ export default function App() {
                     showNotice(`Saved batch plan "${plan.name}".`);
                   }}
                   onQueuePlan={async (planId) => {
-                    const { jobs } = await workspaceApi.queuePlan(planId);
+                    const { jobs } = await workspaceApi.queuePlan(
+                      planId,
+                      workspace.settings.openRouterConfigured ? 'openrouter' : 'gemini'
+                    );
                     await refreshWorkspace();
                     showNotice(`Queued ${jobs.length} background jobs.`);
                     setActiveModule('jobs');

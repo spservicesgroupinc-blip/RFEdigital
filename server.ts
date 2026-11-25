@@ -65,6 +65,97 @@ const ALLOWED_MIME_EXT: Record<string, string> = {
   'image/svg+xml': '.svg',
 };
 
+const REFERENCE_MIME_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/webp': '.webp',
+};
+
+function parseAndValidatePhotoDataUrl(
+  dataUrl: string,
+  mimeHint?: string
+): { buffer: Buffer; mimeType: string; ext: string } {
+  const trimmed = dataUrl.trim();
+  const dataUriMatch = trimmed.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+  let mimeType = (mimeHint || '').toLowerCase();
+  let base64Part = '';
+
+  if (dataUriMatch) {
+    mimeType = dataUriMatch[1].toLowerCase();
+    base64Part = dataUriMatch[2].replace(/\s+/g, '');
+  } else if (mimeType && REFERENCE_MIME_EXT[mimeType]) {
+    base64Part = (trimmed.includes(',') ? trimmed.split(',')[1] : trimmed).replace(/\s+/g, '');
+  } else {
+    throw new Error('Upload a valid PNG, JPEG, or WebP reference photo.');
+  }
+
+  const ext = REFERENCE_MIME_EXT[mimeType];
+  if (!ext) {
+    throw new Error('Reference photo must be a PNG, JPEG, or WebP image.');
+  }
+
+  const buffer = Buffer.from(base64Part, 'base64');
+  if (buffer.byteLength === 0 || buffer.byteLength > MAX_UPLOAD_BYTES) {
+    throw new Error('Reference photo must be non-empty and under 10 MB.');
+  }
+
+  const normalizedMime = mimeType === 'image/jpg' ? 'image/jpeg' : mimeType;
+  return { buffer, mimeType: normalizedMime, ext };
+}
+
+function saveReferencePhotoAsset(
+  product: Product,
+  photo: { name?: string; mimeType?: string; dataUrl: string; caption?: string }
+): StorageAsset {
+  const { buffer, mimeType, ext } = parseAndValidatePhotoDataUrl(photo.dataUrl, photo.mimeType);
+  const cleanBase = sanitizeFolderSlug((photo.name || 'reference-photo').replace(/\.[^.]+$/, '')).slice(0, 32);
+  const storedName = `ref-${cleanBase}-${crypto.randomUUID().slice(0, 6)}${ext}`;
+  const safePath = resolveSafeChildPath(UPLOADS_DIR, storedName);
+  fs.writeFileSync(safePath, buffer);
+
+  const raw = workspaceStore.getRaw();
+  const folder = workspaceStore.ensureProductFolder(product);
+  const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
+
+  const asset: StorageAsset = {
+    id: `asset-${crypto.randomUUID().slice(0, 8)}`,
+    folderId: folder.id,
+    productId: product.id,
+    name: storedName,
+    kind: 'reference',
+    mimeType,
+    sizeBytes: buffer.byteLength,
+    url: `/api/storage/files/${storedName}`,
+    caption: String(photo.caption ?? 'Uploaded reference photo for AI cartoon & illustration generation')
+      .trim()
+      .slice(0, 240),
+    pageOrder: existingCount + 1,
+    driveFileId: null,
+    driveWebLink: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  raw.assets.push(asset);
+  product.referenceAssetId = asset.id;
+  return asset;
+}
+
+function readAssetAsDataUrl(asset: StorageAsset | undefined): string | undefined {
+  if (!asset || !asset.url.startsWith('/api/storage/files/')) return undefined;
+  const normalizedMime = asset.mimeType.toLowerCase();
+  if (!REFERENCE_MIME_EXT[normalizedMime]) return undefined;
+  try {
+    const safePath = resolveSafeChildPath(UPLOADS_DIR, path.basename(asset.url));
+    if (!fs.existsSync(safePath)) return undefined;
+    const buf = fs.readFileSync(safePath);
+    if (buf.byteLength === 0 || buf.byteLength > MAX_UPLOAD_BYTES) return undefined;
+    return `data:${normalizedMime};base64,${buf.toString('base64')}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function requireBearerToken(req: express.Request): string | null {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) return null;
@@ -123,20 +214,31 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
     }
 
     if (job.stepType === 'illustration') {
+      const refAsset = product.referenceAssetId
+        ? raw.assets.find((a) => a.id === product.referenceAssetId)
+        : undefined;
+      const referenceImageDataUrl = readAssetAsDataUrl(refAsset);
+      const effectiveProvider: GenerationProvider =
+        job.provider === 'openrouter'
+          ? 'openrouter'
+          : process.env.OPENROUTER_API_KEY?.trim()
+            ? 'openrouter'
+            : 'gemini';
+
       const generated = await generateStorybookIllustration({
         prompt: job.prompt,
-        stylePreset: 'Editorial gouache storybook illustration',
-        provider: job.provider,
+        stylePreset: '3D Animated Storybook Cartoon — charming expressive character, rich lighting, polished children’s book art',
+        provider: effectiveProvider,
         productTitle: product.title,
+        referenceImageDataUrl,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
       const fileName = `${sanitizeFolderSlug(job.title).slice(0, 40)}-${crypto
         .randomUUID()
-        .slice(0, 6)}.svg`;
+        .slice(0, 6)}${generated.extension}`;
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
-      const svgBuffer = Buffer.from(generated.svgMarkup, 'utf-8');
-      fs.writeFileSync(targetPath, svgBuffer);
+      fs.writeFileSync(targetPath, generated.buffer);
 
       const productAssets = raw.assets.filter((a) => a.productId === product.id);
       const asset: StorageAsset = {
@@ -145,8 +247,8 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
         productId: product.id,
         name: fileName,
         kind: 'illustration',
-        mimeType: 'image/svg+xml',
-        sizeBytes: svgBuffer.byteLength,
+        mimeType: generated.mimeType,
+        sizeBytes: generated.buffer.byteLength,
         url: `/api/storage/files/${fileName}`,
         caption: generated.caption,
         pageOrder: productAssets.length + 1,
@@ -156,11 +258,14 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
       };
 
       raw.assets.push(asset);
+      if (!product.coverAssetId) {
+        product.coverAssetId = asset.id;
+      }
       raw.generations.unshift({
         id: `gen-${crypto.randomUUID().slice(0, 8)}`,
         productId: product.id,
         mode: 'illustration',
-        provider: job.provider,
+        provider: effectiveProvider,
         model: generated.model,
         prompt: job.prompt,
         assetId: asset.id,
@@ -169,7 +274,7 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
 
       job.status = 'completed';
       job.resultAssetId = asset.id;
-      job.resultSummary = `Saved illustration "${fileName}" to ${folder.path}.`;
+      job.resultSummary = `Saved illustration "${fileName}" via ${generated.model}.`;
       job.updatedAt = new Date().toISOString();
       workspaceStore.save();
       return job;
@@ -177,7 +282,7 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
 
     if (job.stepType === 'export') {
       const productAssets = raw.assets
-        .filter((a) => a.productId === product.id)
+        .filter((a) => a.productId === product.id && a.kind !== 'reference')
         .sort((a, b) => a.pageOrder - b.pageOrder);
 
       const { pdfBytes, pageCount } = await buildKdpPdfBuffer({
@@ -322,7 +427,9 @@ async function startServer() {
   });
 
   app.post('/api/library/products', (req, res) => {
-    const body = req.body as Partial<Product>;
+    const body = req.body as Partial<Product> & {
+      referencePhoto?: { name?: string; mimeType?: string; dataUrl?: string };
+    };
     const title = String(body.title ?? '');
     const pageCount = Number(body.pageCount ?? 24);
     const category: ProductCategory =
@@ -339,6 +446,16 @@ async function startServer() {
     const validation = validateProductInput({ title, pageCount, category, trimSize });
     if (!validation.valid) {
       return res.status(400).json({ error: Object.values(validation.errors)[0], errors: validation.errors });
+    }
+
+    if (body.referencePhoto?.dataUrl) {
+      try {
+        parseAndValidatePhotoDataUrl(body.referencePhoto.dataUrl, body.referencePhoto.mimeType);
+      } catch (err) {
+        return res.status(400).json({
+          error: err instanceof Error ? err.message : 'Invalid reference photo upload.',
+        });
+      }
     }
 
     const now = new Date().toISOString();
@@ -359,6 +476,7 @@ async function startServer() {
       includeBleed: Boolean(body.includeBleed ?? true),
       isbn: String(body.isbn ?? '').trim().slice(0, 40) || `979-8-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-0`,
       coverAssetId: null,
+      referenceAssetId: null,
       driveFolderId: null,
       sheetsRowSyncedAt: null,
       manuscriptNotes: String(body.manuscriptNotes ?? '').trim().slice(0, 10000),
@@ -369,8 +487,18 @@ async function startServer() {
     const raw = workspaceStore.getRaw();
     raw.products.unshift(product);
     const folder = workspaceStore.ensureProductFolder(product);
+
+    let referenceAsset: StorageAsset | null = null;
+    if (body.referencePhoto?.dataUrl) {
+      referenceAsset = saveReferencePhotoAsset(product, {
+        name: body.referencePhoto.name,
+        mimeType: body.referencePhoto.mimeType,
+        dataUrl: body.referencePhoto.dataUrl,
+      });
+    }
+
     workspaceStore.save();
-    res.status(201).json({ product, folder });
+    res.status(201).json({ product, folder, referenceAsset });
   });
 
   app.patch('/api/library/products/:id', (req, res) => {
@@ -405,6 +533,10 @@ async function startServer() {
     }
     if (body.coverAssetId !== undefined) {
       product.coverAssetId = typeof body.coverAssetId === 'string' ? body.coverAssetId : null;
+    }
+    if (body.referenceAssetId !== undefined) {
+      product.referenceAssetId =
+        typeof body.referenceAssetId === 'string' ? body.referenceAssetId : null;
     }
     product.updatedAt = new Date().toISOString();
     workspaceStore.save();
@@ -464,7 +596,9 @@ async function startServer() {
       productId: product.id,
       name: storedName,
       kind:
-        kind === 'cover' || kind === 'manuscript' || kind === 'export' ? kind : 'illustration',
+        kind === 'cover' || kind === 'manuscript' || kind === 'export' || kind === 'reference'
+          ? kind
+          : 'illustration',
       mimeType: safeMime,
       sizeBytes: buffer.byteLength,
       url: `/api/storage/files/${storedName}`,
@@ -476,7 +610,9 @@ async function startServer() {
     };
 
     raw.assets.push(asset);
-    if (asset.kind === 'cover' || !product.coverAssetId) {
+    if (asset.kind === 'reference') {
+      product.referenceAssetId = asset.id;
+    } else if (asset.kind === 'cover' || !product.coverAssetId) {
       product.coverAssetId = asset.id;
     }
     workspaceStore.save();
@@ -573,12 +709,31 @@ async function startServer() {
   });
 
   app.post('/api/generate/illustration', async (req, res) => {
-    const { productId, prompt, stylePreset, provider, kind } = req.body as {
+    req.setTimeout(60_000);
+    res.setTimeout(60_000);
+
+    const {
+      productId,
+      prompt,
+      stylePreset,
+      provider,
+      kind,
+      openRouterModel,
+      referenceImageDataUrl,
+      referenceAssetId,
+      saveReferenceToProduct,
+      referenceFileName,
+    } = req.body as {
       productId?: string;
       prompt?: string;
       stylePreset?: string;
       provider?: GenerationProvider;
       kind?: StorageAsset['kind'];
+      openRouterModel?: string;
+      referenceImageDataUrl?: string;
+      referenceAssetId?: string;
+      saveReferenceToProduct?: boolean;
+      referenceFileName?: string;
     };
 
     const raw = workspaceStore.getRaw();
@@ -588,22 +743,57 @@ async function startServer() {
       return res.status(400).json({ error: 'Enter an illustration prompt of at least 5 characters.' });
     }
 
+    let resolvedReferenceDataUrl: string | undefined;
+    if (typeof referenceImageDataUrl === 'string' && referenceImageDataUrl.trim()) {
+      try {
+        const parsed = parseAndValidatePhotoDataUrl(referenceImageDataUrl);
+        resolvedReferenceDataUrl = `data:${parsed.mimeType};base64,${parsed.buffer.toString('base64')}`;
+        if (saveReferenceToProduct) {
+          saveReferencePhotoAsset(product, {
+            name: referenceFileName || `${product.title}-reference`,
+            mimeType: parsed.mimeType,
+            dataUrl: resolvedReferenceDataUrl,
+          });
+        }
+      } catch (err) {
+        return res.status(400).json({
+          error: err instanceof Error ? err.message : 'Invalid reference photo upload.',
+        });
+      }
+    } else if (typeof referenceAssetId === 'string' && referenceAssetId.trim()) {
+      const refAsset = raw.assets.find(
+        (a) => a.id === referenceAssetId && a.productId === product.id
+      );
+      resolvedReferenceDataUrl = readAssetAsDataUrl(refAsset);
+    }
+
     try {
-      const chosenProvider: GenerationProvider = provider === 'openrouter' ? 'openrouter' : 'gemini';
+      const chosenProvider: GenerationProvider =
+        provider === 'openrouter'
+          ? 'openrouter'
+          : provider === 'gemini'
+            ? 'gemini'
+            : process.env.OPENROUTER_API_KEY?.trim()
+              ? 'openrouter'
+              : 'gemini';
+
       const generated = await generateStorybookIllustration({
         prompt: prompt.trim(),
-        stylePreset: stylePreset?.trim() || 'Editorial gouache storybook illustration',
+        stylePreset:
+          stylePreset?.trim() ||
+          '3D Animated Storybook Cartoon — charming expressive character, rich lighting, polished children’s book art',
         provider: chosenProvider,
         productTitle: product.title,
+        referenceImageDataUrl: resolvedReferenceDataUrl,
+        openRouterModel: typeof openRouterModel === 'string' ? openRouterModel.trim() : undefined,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
       const fileName = `${sanitizeFolderSlug(product.title).slice(0, 28)}-${crypto
         .randomUUID()
-        .slice(0, 6)}.svg`;
+        .slice(0, 6)}${generated.extension}`;
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
-      const svgBuffer = Buffer.from(generated.svgMarkup, 'utf-8');
-      fs.writeFileSync(targetPath, svgBuffer);
+      fs.writeFileSync(targetPath, generated.buffer);
 
       const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
       const asset: StorageAsset = {
@@ -612,8 +802,8 @@ async function startServer() {
         productId: product.id,
         name: fileName,
         kind: kind === 'cover' ? 'cover' : 'illustration',
-        mimeType: 'image/svg+xml',
-        sizeBytes: svgBuffer.byteLength,
+        mimeType: generated.mimeType,
+        sizeBytes: generated.buffer.byteLength,
         url: `/api/storage/files/${fileName}`,
         caption: generated.caption,
         pageOrder: existingCount + 1,
@@ -640,7 +830,7 @@ async function startServer() {
       raw.generations.unshift(record);
       workspaceStore.save();
 
-      res.json({ record, asset });
+      res.json({ record, asset, product });
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : 'Illustration generation failed.',
@@ -649,25 +839,37 @@ async function startServer() {
   });
 
   app.post('/api/generate/outline', async (req, res) => {
-    const { productId, brief, stepCount } = req.body as {
+    const { productId, productTitle, category, brief, stepCount } = req.body as {
       productId?: string;
+      productTitle?: string;
+      category?: ProductCategory;
       brief?: string;
       stepCount?: number;
     };
 
     const raw = workspaceStore.getRaw();
-    const product = raw.products.find((p) => p.id === productId);
-    if (!product) return res.status(400).json({ error: 'Select a valid product.' });
+    const product = productId ? raw.products.find((p) => p.id === productId) : undefined;
     if (!brief || typeof brief !== 'string' || brief.trim().length < 5) {
       return res.status(400).json({ error: 'Describe the outline brief (min 5 characters).' });
     }
 
-    const series = raw.series.find((s) => s.id === product.seriesId);
+    const resolvedTitle =
+      product?.title ||
+      (typeof productTitle === 'string' && productTitle.trim().length >= 2
+        ? productTitle.trim().slice(0, 120)
+        : 'New Digital Product');
+    const resolvedCategory: ProductCategory =
+      product?.category ??
+      (category === 'coloring-book' || category === 'art-print' || category === 'journal'
+        ? category
+        : 'childrens-book');
+    const series = product?.seriesId ? raw.series.find((s) => s.id === product.seriesId) : undefined;
+
     try {
       const result = await generateSeriesPlanSteps({
         seriesName: series?.name || 'Standalone Edition',
-        productTitle: product.title,
-        category: product.category,
+        productTitle: resolvedTitle,
+        category: resolvedCategory,
         brief: brief.trim(),
         stepCount: Number(stepCount ?? 5),
       });
@@ -950,7 +1152,13 @@ async function startServer() {
 
     const product = raw.products.find((p) => p.id === plan.productId);
     const provider: GenerationProvider =
-      req.body?.provider === 'openrouter' ? 'openrouter' : 'gemini';
+      req.body?.provider === 'openrouter'
+        ? 'openrouter'
+        : req.body?.provider === 'gemini'
+          ? 'gemini'
+          : process.env.OPENROUTER_API_KEY?.trim()
+            ? 'openrouter'
+            : 'gemini';
 
     const payloads = expandPlanToJobs(plan, product?.title || 'Untitled', provider);
     if (payloads.length === 0) {
@@ -1058,7 +1266,7 @@ async function startServer() {
             .map((id) => raw.assets.find((a) => a.id === id && a.productId === product.id))
             .filter((a): a is StorageAsset => Boolean(a))
         : raw.assets
-            .filter((a) => a.productId === product.id)
+            .filter((a) => a.productId === product.id && a.kind !== 'reference')
             .sort((a, b) => a.pageOrder - b.pageOrder);
 
     const chosenTrim: KdpTrimSize =
@@ -1121,7 +1329,7 @@ async function startServer() {
             .map((id) => raw.assets.find((a) => a.id === id && a.productId === product.id))
             .filter((a): a is StorageAsset => Boolean(a))
         : raw.assets
-            .filter((a) => a.productId === product.id)
+            .filter((a) => a.productId === product.id && a.kind !== 'reference')
             .sort((a, b) => a.pageOrder - b.pageOrder);
 
     try {

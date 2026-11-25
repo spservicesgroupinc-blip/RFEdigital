@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ListPlus, Play, Plus, Sparkles, Trash2 } from 'lucide-react';
-import type { BatchPlan, Product } from '../types/workspace';
+import type { BatchPlan, KdpTrimSize, Product, ProductCategory } from '../types/workspace';
 import { PLAN_TEMPLATES } from '../lib/workspaceLogic';
 
 interface PlanningViewProps {
@@ -8,6 +8,12 @@ interface PlanningViewProps {
   plans: BatchPlan[];
   activeProductId: string | null;
   onSelectProduct: (id: string) => void;
+  onQuickCreateProduct: (payload: {
+    title: string;
+    category: ProductCategory;
+    trimSize: KdpTrimSize;
+    pageCount: number;
+  }) => Promise<Product>;
   onCreatePlan: (payload: {
     productId: string;
     name: string;
@@ -19,7 +25,9 @@ interface PlanningViewProps {
     }>;
   }) => Promise<void>;
   onGenerateOutline: (payload: {
-    productId: string;
+    productId?: string;
+    productTitle?: string;
+    category?: ProductCategory;
     brief: string;
     stepCount: number;
   }) => Promise<
@@ -34,6 +42,7 @@ export function PlanningView({
   plans,
   activeProductId,
   onSelectProduct,
+  onQuickCreateProduct,
   onCreatePlan,
   onGenerateOutline,
   onQueuePlan,
@@ -41,15 +50,19 @@ export function PlanningView({
 }: PlanningViewProps) {
   const productId = activeProductId || products[0]?.id || '';
   const [selectedTemplateId, setSelectedTemplateId] = useState(PLAN_TEMPLATES[0].id);
+  const [creatingNewProduct, setCreatingNewProduct] = useState(false);
+  const [newProductTitle, setNewProductTitle] = useState('');
   const [planName, setPlanName] = useState('Picture Book Production Batch');
-  const [outlineBrief, setOutlineBrief] = useState(
-    'A gentle twilight adventure about a young lantern bear discovering a harbor of floating paper boats.'
-  );
+  const [outlineBrief, setOutlineBrief] = useState('');
   const [draftSteps, setDraftSteps] = useState(PLAN_TEMPLATES[0].starterSteps);
   const [busyAi, setBusyAi] = useState(false);
   const [saving, setSaving] = useState(false);
   const [queuingId, setQueuingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  const showNewProductInput = products.length === 0 || creatingNewProduct;
+  const activeTemplate =
+    PLAN_TEMPLATES.find((t) => t.id === selectedTemplateId) ?? PLAN_TEMPLATES[0];
 
   const applyTemplate = (tplId: string) => {
     setSelectedTemplateId(tplId);
@@ -61,13 +74,20 @@ export function PlanningView({
   };
 
   const handleGenerateOutline = async () => {
-    if (!productId) return;
+    if (outlineBrief.trim().length < 5) {
+      setError('Enter a short concept or theme in AI Series Outline Brief first (min 5 characters).');
+      return;
+    }
     setError('');
     setBusyAi(true);
     try {
       const steps = await onGenerateOutline({
-        productId,
-        brief: outlineBrief,
+        productId: showNewProductInput ? undefined : productId || undefined,
+        productTitle: showNewProductInput
+          ? newProductTitle.trim() || planName.trim() || 'New Digital Product'
+          : undefined,
+        category: activeTemplate.category,
+        brief: outlineBrief.trim(),
         stepCount: 5,
       });
       setDraftSteps(steps);
@@ -80,7 +100,11 @@ export function PlanningView({
 
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId) {
+    if (showNewProductInput && newProductTitle.trim().length < 2) {
+      setError('Enter a product title (at least 2 characters) to create your product and save this plan.');
+      return;
+    }
+    if (!showNewProductInput && !productId) {
       setError('Select a product for this batch plan.');
       return;
     }
@@ -96,8 +120,21 @@ export function PlanningView({
     setError('');
     setSaving(true);
     try {
+      let targetProductId = productId;
+      if (showNewProductInput) {
+        const created = await onQuickCreateProduct({
+          title: newProductTitle.trim(),
+          category: activeTemplate.category,
+          trimSize: activeTemplate.trimSize,
+          pageCount: activeTemplate.defaultPages,
+        });
+        targetProductId = created.id;
+        setCreatingNewProduct(false);
+        setNewProductTitle('');
+      }
+
       await onCreatePlan({
-        productId,
+        productId: targetProductId,
         name: planName.trim(),
         templateId: selectedTemplateId,
         steps: draftSteps,
@@ -167,21 +204,52 @@ export function PlanningView({
           <form onSubmit={handleCreatePlan} className="mt-5 space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="plan-product" className="block text-xs font-medium text-slate-700">
-                  Target Product
-                </label>
-                <select
-                  id="plan-product"
-                  value={productId}
-                  onChange={(e) => onSelectProduct(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor={showNewProductInput ? 'plan-new-product' : 'plan-product'}
+                    className="block text-xs font-medium text-slate-700"
+                  >
+                    {showNewProductInput ? 'New Product Title' : 'Target Product'}
+                  </label>
+                  {products.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCreatingNewProduct((prev) => !prev)}
+                      className="text-xs font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+                    >
+                      {creatingNewProduct ? 'Choose existing' : '+ New product'}
+                    </button>
+                  )}
+                </div>
+
+                {showNewProductInput ? (
+                  <div className="mt-1">
+                    <input
+                      id="plan-new-product"
+                      type="text"
+                      value={newProductTitle}
+                      onChange={(e) => setNewProductTitle(e.target.value)}
+                      placeholder="e.g., Zebo The Dog"
+                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Automatically creates this product in Library when you save the plan.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    id="plan-product"
+                    value={productId}
+                    onChange={(e) => onSelectProduct(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-700 focus:outline-none"
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label htmlFor="plan-name" className="block text-xs font-medium text-slate-700">
@@ -208,11 +276,12 @@ export function PlanningView({
                   type="text"
                   value={outlineBrief}
                   onChange={(e) => setOutlineBrief(e.target.value)}
-                  className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-blue-700 focus:outline-none"
+                  placeholder="Describe your book concept, audience, or theme to draft production steps…"
+                  className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none"
                 />
                 <button
                   type="button"
-                  disabled={busyAi || !productId}
+                  disabled={busyAi}
                   onClick={handleGenerateOutline}
                   className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-50 whitespace-nowrap shrink-0"
                 >

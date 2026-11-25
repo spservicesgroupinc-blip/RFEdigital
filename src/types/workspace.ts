@@ -135,6 +135,7 @@ export interface Product {
   includeBleed: boolean;
   isbn: string;
   coverAssetId: string | null;
+  referenceAssetId?: string | null;
   driveFolderId: string | null;
   sheetsRowSyncedAt: string | null;
   manuscriptNotes: string;
@@ -151,7 +152,7 @@ export interface StorageFolder {
   createdAt: string;
 }
 
-export type AssetKind = 'cover' | 'illustration' | 'manuscript' | 'export';
+export type AssetKind = 'cover' | 'illustration' | 'manuscript' | 'export' | 'reference';
 
 export interface StorageAsset {
   id: string;

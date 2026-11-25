@@ -24,6 +24,16 @@
   a[href] {
     cursor: pointer;
   }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select {
+    line-height: 1.5;
+    min-height: 2.5rem;
+  }
+
+  textarea {
+    line-height: 1.5;
+  }
 }
 
 .tabular-nums {
