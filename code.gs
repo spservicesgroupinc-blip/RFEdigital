@@ -58,8 +58,22 @@ const SHEET_SCHEMAS = {
     'sizeBytes',
     'pageOrder',
     'caption',
+    'storyText',
+    'textPlacement',
     'driveFileId',
     'driveWebLink',
+    'createdAt',
+  ],
+  Image_Gallery: [
+    'id',
+    'name',
+    'label',
+    'tags',
+    'mimeType',
+    'sizeBytes',
+    'driveFileId',
+    'driveWebLink',
+    'downloadUrl',
     'createdAt',
   ],
   Jobs: [
@@ -239,7 +253,16 @@ function doGet(e) {
         products: readTable_(ss, 'Products'),
         series: readTable_(ss, 'Series'),
         assets: readTable_(ss, 'Assets'),
+        galleryImages: readTable_(ss, 'Image_Gallery'),
         jobs: readTable_(ss, 'Jobs'),
+      });
+    }
+
+    if (action === 'listGalleryImages') {
+      const ss = SpreadsheetApp.openById(setup.spreadsheetId);
+      return jsonResponse_({
+        ok: true,
+        galleryImages: readTable_(ss, 'Image_Gallery'),
       });
     }
 
@@ -252,6 +275,7 @@ function doGet(e) {
         products: Math.max(0, (ss.getSheetByName('Products') ? ss.getSheetByName('Products').getLastRow() : 1) - 1),
         series: Math.max(0, (ss.getSheetByName('Series') ? ss.getSheetByName('Series').getLastRow() : 1) - 1),
         assets: Math.max(0, (ss.getSheetByName('Assets') ? ss.getSheetByName('Assets').getLastRow() : 1) - 1),
+        galleryImages: Math.max(0, (ss.getSheetByName('Image_Gallery') ? ss.getSheetByName('Image_Gallery').getLastRow() : 1) - 1),
         jobs: Math.max(0, (ss.getSheetByName('Jobs') ? ss.getSheetByName('Jobs').getLastRow() : 1) - 1),
       },
     });
@@ -314,6 +338,28 @@ function doPost(e) {
       if (Array.isArray(body.assets)) {
         summary.assets = writeTable_(ss, 'Assets', SHEET_SCHEMAS.Assets, body.assets);
       }
+      if (Array.isArray(body.galleryImages)) {
+        const normalizedGallery = body.galleryImages.map(function (img) {
+          return {
+            id: img.id || '',
+            name: img.name || '',
+            label: img.label || img.name || '',
+            tags: Array.isArray(img.tags) ? img.tags.join(', ') : String(img.tags || ''),
+            mimeType: img.mimeType || 'image/png',
+            sizeBytes: img.sizeBytes || 0,
+            driveFileId: img.driveFileId || '',
+            driveWebLink: img.driveWebLink || '',
+            downloadUrl: img.driveDownloadUrl || img.downloadUrl || '',
+            createdAt: img.createdAt || syncedAt,
+          };
+        });
+        summary.galleryImages = writeTable_(
+          ss,
+          'Image_Gallery',
+          SHEET_SCHEMAS.Image_Gallery,
+          normalizedGallery
+        );
+      }
       if (Array.isArray(body.jobs)) {
         summary.jobs = writeTable_(ss, 'Jobs', SHEET_SCHEMAS.Jobs, body.jobs);
       }
@@ -332,8 +378,106 @@ function doPost(e) {
         products: readTable_(ss, 'Products'),
         series: readTable_(ss, 'Series'),
         assets: readTable_(ss, 'Assets'),
+        galleryImages: readTable_(ss, 'Image_Gallery'),
         jobs: readTable_(ss, 'Jobs'),
       });
+    }
+
+    if (action === 'listGalleryImages') {
+      return jsonResponse_({
+        ok: true,
+        galleryImages: readTable_(ss, 'Image_Gallery'),
+      });
+    }
+
+    if (action === 'uploadGalleryImage') {
+      if (!body.fileName || !body.base64Data) {
+        return jsonResponse_({ ok: false, error: 'fileName and base64Data are required.' });
+      }
+      const rootFolder = DriveApp.getFolderById(setup.driveRootId);
+      const refsFolder = ensureChildFolder_(rootFolder, 'References');
+      const safeName = sanitizeName_(body.fileName.replace(/\.[^.]+$/, '')) +
+        (body.fileName.indexOf('.') >= 0 ? body.fileName.slice(body.fileName.lastIndexOf('.')) : '.png');
+
+      const bytes = Utilities.base64Decode(body.base64Data);
+      const blob = Utilities.newBlob(
+        bytes,
+        body.mimeType || 'image/png',
+        safeName
+      );
+      const file = refsFolder.createFile(blob);
+      const downloadUrl = 'https://drive.google.com/uc?export=download&id=' + file.getId();
+      const now = new Date().toISOString();
+      const record = {
+        id: String(body.id || 'gal-' + Utilities.getUuid().slice(0, 8)),
+        name: safeName,
+        label: String(body.label || safeName).slice(0, 120),
+        tags: Array.isArray(body.tags) ? body.tags.join(', ') : String(body.tags || ''),
+        mimeType: body.mimeType || 'image/png',
+        sizeBytes: bytes.length,
+        driveFileId: file.getId(),
+        driveWebLink: file.getUrl(),
+        downloadUrl: downloadUrl,
+        createdAt: String(body.createdAt || now),
+      };
+
+      const gallerySheet = ensureSheetWithHeaders_(ss, 'Image_Gallery', SHEET_SCHEMAS.Image_Gallery);
+      gallerySheet.appendRow(
+        SHEET_SCHEMAS.Image_Gallery.map(function (col) {
+          return record[col] !== undefined && record[col] !== null ? String(record[col]) : '';
+        })
+      );
+
+      return jsonResponse_({
+        ok: true,
+        galleryImage: record,
+        driveFolderId: refsFolder.getId(),
+        driveFileId: file.getId(),
+        driveWebLink: file.getUrl(),
+        downloadUrl: downloadUrl,
+      });
+    }
+
+    if (action === 'getGalleryImage') {
+      if (!body.driveFileId) {
+        return jsonResponse_({ ok: false, error: 'driveFileId is required.' });
+      }
+      const file = DriveApp.getFileById(String(body.driveFileId));
+      const blob = file.getBlob();
+      const base64Data = Utilities.base64Encode(blob.getBytes());
+      return jsonResponse_({
+        ok: true,
+        name: file.getName(),
+        mimeType: blob.getContentType() || 'image/png',
+        base64Data: base64Data,
+      });
+    }
+
+    if (action === 'deleteGalleryImage') {
+      const targetId = String(body.id || '');
+      const driveFileId = String(body.driveFileId || '');
+      if (driveFileId) {
+        try {
+          DriveApp.getFileById(driveFileId).setTrashed(true);
+        } catch (trashErr) {
+          // File may already be deleted or inaccessible
+        }
+      }
+      const gallerySheet = ss.getSheetByName('Image_Gallery');
+      if (gallerySheet && gallerySheet.getLastRow() >= 2 && (targetId || driveFileId)) {
+        const vals = gallerySheet.getDataRange().getValues();
+        const hdrs = vals[0];
+        const idCol = hdrs.indexOf('id');
+        const fileCol = hdrs.indexOf('driveFileId');
+        for (let r = vals.length - 1; r >= 1; r--) {
+          const matchId = targetId && idCol >= 0 && String(vals[r][idCol]) === targetId;
+          const matchFile = driveFileId && fileCol >= 0 && String(vals[r][fileCol]) === driveFileId;
+          if (matchId || matchFile) {
+            gallerySheet.deleteRow(r + 1);
+          }
+        }
+      }
+      return jsonResponse_({ ok: true });
     }
 
     if (action === 'uploadFile') {
@@ -491,6 +635,23 @@ function ensureSheetWithHeaders_(ss, name, headers) {
     headerRange.setFontWeight('bold');
     headerRange.setBackground('#F1F5F9');
     sheet.setFrozenRows(1);
+  } else {
+    // Safely append any newly added schema columns without disturbing existing rows
+    const existingHeaders = sheet
+      .getRange(1, 1, 1, Math.max(1, sheet.getLastColumn()))
+      .getValues()[0]
+      .map(function (h) {
+        return String(h);
+      });
+    for (let i = 0; i < headers.length; i++) {
+      if (existingHeaders.indexOf(headers[i]) === -1) {
+        const nextCol = sheet.getLastColumn() + 1;
+        const cell = sheet.getRange(1, nextCol);
+        cell.setValue(headers[i]);
+        cell.setFontWeight('bold');
+        cell.setBackground('#F1F5F9');
+      }
+    }
   }
   return sheet;
 }

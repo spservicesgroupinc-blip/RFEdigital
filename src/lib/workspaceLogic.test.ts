@@ -5,6 +5,7 @@ import {
   buildPlanStepsFromPromptPack,
   buildPromptPackFromConcept,
   buildPromptPackFromTrend,
+  buildSceneVariationDirective,
   calculateKdpDimensionsPt,
   computeProductReadiness,
   expandPlanToJobs,
@@ -14,17 +15,21 @@ import {
   formatBytes,
   generateAppsScriptBridge,
   getNextRunnableJob,
+  isLikelyPromptNotStory,
   mapTrendOpportunityToProjectSeed,
   normalizeKdpTrimSize,
   normalizeTrendOpportunity,
+  parseManuscriptIntoPageTexts,
   pickStylePresetForProduct,
   sanitizeFolderSlug,
   sanitizeSourceUrl,
+  sanitizeTextForPdf,
   transitionJobStatus,
   validateAppsScriptWebAppUrl,
   validateProductInput,
   validateTokenName,
 } from './workspaceLogic';
+import { buildKdpPdfBuffer } from '../../server/pdfExport.js';
 import type {
   BatchPlan,
   ExportArtifact,
@@ -517,4 +522,200 @@ test('computeProductReadiness tracks milestones and next recommended workflow st
   assert.equal(step4.completedMilestones, 4);
   assert.equal(step4.recommendedStep, 4);
 });
+
+test('sanitizeTextForPdf normalizes smart quotes, dashes, and strips unsupported emoji for WinAnsi PDF fonts', () => {
+  const raw = '“Good morning,” said Zebo — wagging his tail… 🐶✨\nLet’s explore!';
+  const clean = sanitizeTextForPdf(raw);
+  assert.ok(clean.includes('"Good morning,"'));
+  assert.ok(clean.includes(' - '));
+  assert.ok(clean.includes('...'));
+  assert.ok(clean.includes("Let's explore!"));
+  assert.equal(/[^\x0A\x20-\xFF]/.test(clean), false);
+});
+
+test('isLikelyPromptNotStory detects raw AI prompts and trend briefs so they never print as book story text', () => {
+  assert.equal(
+    isLikelyPromptNotStory('High-resolution full-bleed illustration of a happy dog in a sunny park'),
+    true
+  );
+  assert.equal(
+    isLikelyPromptNotStory('Source Trend: Cozy Bedtime Owls\nWinning Angle: Short rhythmic pages'),
+    true
+  );
+  assert.equal(
+    isLikelyPromptNotStory('Zebo sniffed the bright yellow daisies and barked hello to a tiny blue butterfly.'),
+    false
+  );
+});
+
+test('parseManuscriptIntoPageTexts extracts clean read-aloud pages and strips visual notes & KDP metadata', () => {
+  const manuscript = [
+    'Spread 1:',
+    'Zebo stretched his furry paws in the golden morning sun. Today felt like a day for a big adventure!',
+    '[Visual: Wide angle of sunlit bedroom with a playful puppy]',
+    '',
+    'Spread 2:',
+    'Out in the backyard meadow, Zebo spotted a fluttering blue butterfly dancing over the clovers.',
+    'Illustration note: Low-angle tracking shot in lush grass.',
+    '',
+    'Spread 3:',
+    'When the stars peeked out at twilight, Zebo curled up on his cozy blanket and dreamed of tomorrow.',
+    '',
+    'KDP Listing & Keywords:',
+    'Subtitle: A Bedtime Story for Kids Ages 3-6',
+    'Keywords: dog bedtime book, puppy picture book',
+  ].join('\n');
+
+  const pages = parseManuscriptIntoPageTexts(manuscript, 10);
+  assert.equal(pages.length, 3);
+  assert.ok(pages[0].includes('Zebo stretched his furry paws'));
+  assert.equal(pages[0].includes('Visual:'), false);
+  assert.ok(pages[1].includes('fluttering blue butterfly'));
+  assert.equal(pages[1].includes('Illustration note:'), false);
+  assert.ok(pages[2].includes('stars peeked out'));
+
+  // Trend metadata brief alone should return empty array rather than printing trend notes on pages
+  const trendBriefOnly = 'Source Trend: Cozy Bakery\nTarget Audience: Adults\nWinning Angle: Thick lines';
+  assert.deepEqual(parseManuscriptIntoPageTexts(trendBriefOnly, 6), []);
+});
+
+test('buildSceneVariationDirective returns distinct framing directives across consecutive pages', () => {
+  const d0 = buildSceneVariationDirective(0, 6);
+  const d1 = buildSceneVariationDirective(1, 6);
+  const d2 = buildSceneVariationDirective(2, 6);
+  assert.notEqual(d0, d1);
+  assert.notEqual(d1, d2);
+  assert.ok(d0.includes('Page 1 of 6'));
+  assert.ok(d2.includes('Page 3 of 6'));
+});
+
+test('buildKdpPdfBuffer compiles valid multi-page illustrated book PDFs across layouts and excludes reference photos', async () => {
+  const sampleProduct: Product = {
+    id: 'prod-pdf-test',
+    seriesId: null,
+    title: 'Zebo Finds a Rainbow',
+    subtitle: 'A Backyard Picture Book',
+    category: 'childrens-book',
+    status: 'ready-for-kdp',
+    trimSize: '8.5x8.5',
+    pageCount: 24,
+    includeBleed: true,
+    isbn: '979-8-1234-5678-0',
+    coverAssetId: 'a-cover',
+    referenceAssetId: 'a-ref',
+    driveFolderId: null,
+    sheetsRowSyncedAt: null,
+    manuscriptNotes:
+      'Page 1: Zebo woke up early and pressed his nose to the cool window glass.\n\nPage 2: Raindrops sparkled like tiny diamonds on every green leaf outside.',
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z',
+  };
+
+  // Valid 1x1 PNG data URL for embedded raster override
+  const tinyPngDataUrl =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6z8AAAAASUVORK5CYII=';
+
+  const sampleAssets: StorageAsset[] = [
+    {
+      id: 'a-ref',
+      folderId: 'f1',
+      productId: sampleProduct.id,
+      name: 'zebo-photo.png',
+      kind: 'reference',
+      mimeType: 'image/png',
+      sizeBytes: 68,
+      url: '/api/storage/files/nonexistent-ref.png',
+      caption: 'Uploaded reference photo',
+      pageOrder: 1,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+    {
+      id: 'a-cover',
+      folderId: 'f1',
+      productId: sampleProduct.id,
+      name: 'cover.png',
+      kind: 'cover',
+      mimeType: 'image/png',
+      sizeBytes: 68,
+      url: '/api/storage/files/nonexistent-cover.png',
+      caption: 'High-resolution cover illustration prompt',
+      pageOrder: 2,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+    {
+      id: 'a-p1',
+      folderId: 'f1',
+      productId: sampleProduct.id,
+      name: 'page-1.png',
+      kind: 'illustration',
+      mimeType: 'image/png',
+      sizeBytes: 68,
+      url: '/api/storage/files/nonexistent-p1.png',
+      caption: 'Prompt: Draw dog by window',
+      storyText: 'Zebo pressed his wet nose against the cool morning window.',
+      pageOrder: 3,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+    {
+      id: 'a-p2',
+      folderId: 'f1',
+      productId: sampleProduct.id,
+      name: 'page-2.png',
+      kind: 'illustration',
+      mimeType: 'image/png',
+      sizeBytes: 68,
+      url: '/api/storage/files/nonexistent-p2.png',
+      caption: 'Prompt: Draw dog in rain garden',
+      pageOrder: 4,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+  ];
+
+  const rasterOverrides = {
+    'a-cover': tinyPngDataUrl,
+    'a-p1': tinyPngDataUrl,
+    'a-p2': tinyPngDataUrl,
+  };
+
+  // Classic picture book layout: Title + Cover + 2 interior pages = 4 pages (reference photo excluded)
+  const classic = await buildKdpPdfBuffer({
+    product: sampleProduct,
+    assets: sampleAssets,
+    trimSize: '8.5x8.5',
+    includeBleed: true,
+    includeTitlePage: true,
+    includeCaptions: true,
+    pageLayout: 'below-image',
+    includeCoverTitle: true,
+    authorImprint: 'FolioPress Studio',
+    rasterOverrides,
+  });
+  assert.equal(classic.pageCount, 4);
+  assert.equal(Buffer.from(classic.pdfBytes.slice(0, 5)).toString('ascii'), '%PDF-');
+
+  // Facing-page spread layout: Title + Cover + (2 * 2) facing spreads = 6 pages
+  const facing = await buildKdpPdfBuffer({
+    product: sampleProduct,
+    assets: sampleAssets,
+    trimSize: '8.5x8.5',
+    includeBleed: true,
+    includeTitlePage: true,
+    includeCaptions: true,
+    pageLayout: 'facing-page',
+    includeCoverTitle: true,
+    authorImprint: 'FolioPress Studio',
+    rasterOverrides,
+  });
+  assert.equal(facing.pageCount, 6);
+  assert.equal(Buffer.from(facing.pdfBytes.slice(0, 5)).toString('ascii'), '%PDF-');
+});
+
 

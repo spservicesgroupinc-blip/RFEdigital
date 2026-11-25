@@ -1280,3 +1280,161 @@ export function filterTrendOpportunities(
       return b.opportunity_score - a.opportunity_score;
     });
 }
+
+/**
+ * Normalizes Unicode typography (smart quotes, em/en dashes, ellipses, bullets)
+ * into clean WinAnsi-safe text so pdf-lib standard fonts never drop characters or fail.
+ */
+export function sanitizeTextForPdf(raw: string): string {
+  return String(raw ?? '')
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    .replace(/[\u2014\u2015]/g, ' - ')
+    .replace(/[\u2012\u2013\u2212]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u2022\u25CF\u25AA]/g, '*')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Detects whether a caption string is actually an internal AI image prompt or trend brief
+ * rather than clean story text meant to be printed inside a book.
+ */
+export function isLikelyPromptNotStory(text: string): boolean {
+  const s = text.trim();
+  if (!s) return true;
+  if (s.startsWith('[TREND RESEARCH BRIEF]')) return true;
+  const promptSignals = [
+    /^children'?s picture book illustration/i,
+    /^storybook interior illustration/i,
+    /^crisp black-and-white bold ink/i,
+    /^enchanting children'?s picture book front cover/i,
+    /^printable wall art piece/i,
+    /^reference photo for ai/i,
+    /^high-resolution\b/i,
+    /^source\s+trend\s*:/i,
+    /^winning\s+angle\s*:/i,
+    /^target\s+audience\s*:/i,
+    /\bfull-bleed\s+illustration\b/i,
+    /\bart style:\s/i,
+    /\bno garbled text\b/i,
+    /\bsuitable for .* printing\b/i,
+    /\bcomposition,\s*\d+(\.\d+)?x\d+/i,
+  ];
+  return promptSignals.some((rx) => rx.test(s));
+}
+
+function cleanStorySegment(raw: string): string {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      // Strip visual/illustration notes and metadata lines from printed story text
+      if (/^(?:\*{0,2})(?:visual|illustration|art|scene)\s*(?:note|direction|prompt|description)?\s*:/i.test(line)) {
+        return false;
+      }
+      if (/^\[(?:visual|illustration|art|scene)[^\]]*\]$/i.test(line)) {
+        return false;
+      }
+      if (/^(?:title|subtitle|blurb|keywords|categories|bisac|target audience|source trend|winning angle)\s*:/i.test(line)) {
+        return false;
+      }
+      return true;
+    })
+    .map((line) =>
+      line
+        .replace(/^#+\s*/, '')
+        .replace(/^\*{1,2}([^*]+)\*{1,2}:\s*/, '')
+        .replace(/^(?:text|story|copy|narration)\s*:\s*/i, '')
+        .replace(/^[-*]\s+/, '')
+        .replace(/\*\*/g, '')
+        .replace(/^["“]|["”]$/g, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  return lines.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Parses a generated manuscript (Spread 1..N, Page 1..N, or multi-paragraph text)
+ * into clean per-page story passages ready to typeset onto illustrated book pages.
+ */
+export function parseManuscriptIntoPageTexts(
+  manuscriptNotes?: string | null,
+  maxPages = 24
+): string[] {
+  const raw = String(manuscriptNotes ?? '').trim();
+  if (!raw) return [];
+
+  // Strip out [TREND RESEARCH BRIEF] and KDP listing metadata blocks if appended in manuscriptNotes
+  let working = raw;
+  const kdpSplitIdx = working.search(
+    /(?:^|\n)(?:---\s*(?:KDP|Storefront|Listing|Metadata)|(?:#{1,4}\s*)?(?:\*{0,2})(?:KDP|Storefront)\s+(?:Listing|Metadata))/i
+  );
+  if (kdpSplitIdx > 0) {
+    working = working.slice(0, kdpSplitIdx).trim();
+  }
+  if (working.startsWith('[TREND RESEARCH BRIEF]')) {
+    const nextSection = working.search(/\n---\s|\n(?:#{1,3}\s*)?(?:\*{0,2})(?:Spread|Page|Scene)\s*1\b/i);
+    if (nextSection === -1) return [];
+    working = working.slice(nextSection).trim();
+  }
+
+  // 1. Primary strategy: split by explicit Spread / Page / Scene markers
+  const markerRegex =
+    /(?:^|\n)[ \t]*(?:#{1,4}[ \t]*)?(?:\*{0,2})(?:Spread|Page|Scene)[ \t]*\d+(?:[ \t]*[-–—][ \t]*[^\n:]*)?(?:\*{0,2})[ \t]*(?::[ \t]*|\r?\n)/gi;
+  const matches = Array.from(working.matchAll(markerRegex));
+
+  if (matches.length >= 1) {
+    const segments: string[] = [];
+    for (let i = 0; i < matches.length; i++) {
+      const start = (matches[i].index ?? 0) + matches[i][0].length;
+      const end = i + 1 < matches.length ? (matches[i + 1].index ?? working.length) : working.length;
+      const cleaned = cleanStorySegment(working.slice(start, end));
+      if (cleaned.length >= 6 && !isLikelyPromptNotStory(cleaned)) {
+        segments.push(cleaned);
+      }
+    }
+    if (segments.length > 0) {
+      return segments.slice(0, maxPages);
+    }
+  }
+
+  // 2. Fallback: split by blank lines into clean story paragraphs
+  const paragraphs = working
+    .split(/\n{2,}/)
+    .map((p) => cleanStorySegment(p))
+    .filter((p) => p.length >= 12 && !isLikelyPromptNotStory(p));
+
+  return paragraphs.slice(0, maxPages);
+}
+
+const SCENE_CAMERA_DIRECTIVES = [
+  'Establishing wide-angle opening shot — introduce the character in an inviting, sunlit setting with open sky/breathing room.',
+  'Dynamic three-quarter action pose — show the character mid-motion exploring or discovering something exciting, different background from page 1.',
+  'Warm medium close-up — expressive face and eyes reacting with wonder or joy to a new companion or discovery in a fresh environment.',
+  'Playful low-angle adventure shot — rich foreground elements and lively depth, character interacting actively with the scene.',
+  'Over-the-shoulder storytelling angle — looking toward a magical landmark or new vista so the setting feels expansive and distinct.',
+  'Cozy golden-hour wide composition — heartwarming resolved moment with soft warm lighting and calm visual balance.',
+  'Whimsical overhead / bird’s-eye storybook angle — charming winding path or cozy room layout giving fresh visual variety.',
+  'Gentle twilight / bedtime finale framing — peaceful, comforting mood wrapping up the journey under soft starry light.',
+];
+
+/**
+ * Produces a distinct visual framing & pose directive for each page so uploading ONE
+ * reference photo yields genuinely varied, dynamic book pages instead of repeating the same pose.
+ */
+export function buildSceneVariationDirective(sceneIndex: number, totalScenes?: number): string {
+  const safeIdx = Math.max(0, Math.floor(sceneIndex));
+  const directive = SCENE_CAMERA_DIRECTIVES[safeIdx % SCENE_CAMERA_DIRECTIVES.length];
+  const label = totalScenes && totalScenes > 1
+    ? `Page ${safeIdx + 1} of ${totalScenes}`
+    : `Page ${safeIdx + 1}`;
+  return `${label} composition: ${directive}`;
+}
+

@@ -5,6 +5,7 @@ import type {
   ProductCategory,
   ProductPromptPack,
 } from '../src/types/workspace.js';
+import { buildSceneVariationDirective } from '../src/lib/workspaceLogic.js';
 
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -367,6 +368,9 @@ export async function generateOpenRouterRasterImage(params: {
   productTitle: string;
   referenceImageDataUrl?: string;
   openRouterModel?: string;
+  sceneIndex?: number;
+  totalScenes?: number;
+  isCover?: boolean;
 }): Promise<GeneratedImageOutput> {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
@@ -381,22 +385,31 @@ export async function generateOpenRouterRasterImage(params: {
     params.referenceImageDataUrl && params.referenceImageDataUrl.startsWith('data:image/')
   );
 
-  const instructionText = hasReference
-    ? `Create a high-resolution, publication-ready illustration for the digital product "${params.productTitle}" based directly on the uploaded reference photo.
-Style Direction: ${params.stylePreset}
-Scene & Character Prompt: ${params.prompt}
+  const variationLine =
+    typeof params.sceneIndex === 'number'
+      ? buildSceneVariationDirective(params.sceneIndex, params.totalScenes)
+      : params.isCover
+        ? 'Hero Front Cover composition: iconic centered storybook framing with clean open sky/soft background in the upper third for typography.'
+        : 'Fresh dynamic storybook scene framing with rich environmental storytelling.';
 
-Requirements:
-- Faithfully preserve the recognizable likeness, markings, coloring, proportions, and charming personality of the subject in the reference photo while transforming it seamlessly into the requested illustration/cartoon style.
-- Clean, polished framing suitable for a commercial children's book, print, or cover.
-- No watermarks, no random text, no distorted anatomy.`
+  const instructionText = hasReference
+    ? `Create a high-resolution, publication-ready illustration for the book/product "${params.productTitle}" using the uploaded photo strictly as a CHARACTER IDENTITY REFERENCE.
+Style Direction: ${params.stylePreset}
+Scene & Action Prompt: ${params.prompt}
+Camera & Page Framing: ${variationLine}
+
+Critical Multi-Page Consistency & Variety Rules:
+1. CHARACTER LIKENESS: Faithfully preserve the exact recognizable identity of the subject from the uploaded photo (same face, fur/hair colors, distinctive markings, ear shape, proportions, and personality) transformed seamlessly into the requested illustration style.
+2. BRAND-NEW SCENE & POSE: Do NOT copy the original photo's background, lighting, or static pose. Place this same character into the completely new environment, active body pose, and camera angle described in the Scene Prompt and Camera Framing above so every book page feels distinct and alive.
+3. CLEAN PRINT ARTWORK: Leave subtle breathing room near the bottom or top margin for book text typesetting. Render ZERO embedded text, ZERO letters, ZERO speech bubbles, ZERO watermarks, and no distorted anatomy.`
     : `Create a high-resolution, publication-ready illustration for the digital product "${params.productTitle}".
 Style Direction: ${params.stylePreset}
 Scene Prompt: ${params.prompt}
+Camera & Page Framing: ${variationLine}
 
 Requirements:
-- Clean, polished framing suitable for a commercial book, coloring page, or printable wall art.
-- No watermarks or random garbled text.`;
+- Clean, polished framing suitable for a commercial illustrated book, coloring page, or printable wall art.
+- Render ZERO embedded text, ZERO words, ZERO letters, and ZERO watermarks inside the artwork (book typography is typeset cleanly separately).`;
 
   const userContent = hasReference
     ? [
@@ -494,6 +507,9 @@ export async function generateStorybookIllustration(params: {
   productTitle: string;
   referenceImageDataUrl?: string;
   openRouterModel?: string;
+  sceneIndex?: number;
+  totalScenes?: number;
+  isCover?: boolean;
 }): Promise<GeneratedImageOutput> {
   if (params.provider === 'openrouter') {
     return generateOpenRouterRasterImage({
@@ -502,24 +518,32 @@ export async function generateStorybookIllustration(params: {
       productTitle: params.productTitle,
       referenceImageDataUrl: params.referenceImageDataUrl,
       openRouterModel: params.openRouterModel,
+      sceneIndex: params.sceneIndex,
+      totalScenes: params.totalScenes,
+      isCover: params.isCover,
     });
   }
 
   // Gemini vector fallback when user explicitly selects Gemini 4 Hydrogen (free text/SVG route)
+  const variationLine =
+    typeof params.sceneIndex === 'number'
+      ? buildSceneVariationDirective(params.sceneIndex, params.totalScenes)
+      : 'Distinct illustrated book scene framing.';
   const systemInstruction = `You are a master editorial book illustrator. Create a rich, layered, publication-grade SVG illustration with viewBox="0 0 800 800" for "${params.productTitle}".
 Style direction: ${params.stylePreset}.
+Framing: ${variationLine}
 Rules:
 - Output ONLY valid standalone <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">...</svg> markup. No markdown fences, no commentary.
 - Use rich layered backgrounds, gradients (<defs><linearGradient>/<radialGradient>), organic curved paths, atmospheric lighting, foreground framing foliage/architecture, and a clear central storybook focal subject.
 - Do NOT include <script>, <foreignObject>, external image links, or inline event handlers.
-- Do NOT include placeholder text or watermarks.`;
+- Do NOT include any text, letters, or watermarks.`;
 
   const ai = getGeminiClient();
   const hasReference = Boolean(
     params.referenceImageDataUrl && params.referenceImageDataUrl.startsWith('data:image/')
   );
 
-  let contents: unknown = `Illustrate this page scene: ${params.prompt}`;
+  let contents: unknown = `Illustrate this page scene (${variationLine}): ${params.prompt}`;
   if (hasReference) {
     const match = params.referenceImageDataUrl!.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (match) {
@@ -527,7 +551,7 @@ Rules:
         parts: [
           { inlineData: { mimeType: match[1], data: match[2] } },
           {
-            text: `Using the subject from this uploaded reference photo, illustrate this scene as a charming storybook cartoon/illustration: ${params.prompt}`,
+            text: `Use the character/subject in this reference photo as the consistent hero, but place them in a brand-new dynamic pose and scene (${variationLine}): ${params.prompt}`,
           },
         ],
       };

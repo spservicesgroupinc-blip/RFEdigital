@@ -2,11 +2,13 @@ import type {
   ApiTokenRecord,
   BatchPlan,
   ExportArtifact,
+  GalleryImage,
   GenerationMode,
   GenerationProvider,
   GenerationRecord,
   JobItem,
   KdpTrimSize,
+  PageTextLayout,
   Product,
   ProductCategory,
   ProductPromptPack,
@@ -101,10 +103,60 @@ export const workspaceApi = {
       body: JSON.stringify(payload),
     }),
 
+  updateAsset: (
+    id: string,
+    payload: {
+      storyText?: string;
+      textPlacement?: PageTextLayout | '';
+      caption?: string;
+      pageOrder?: number;
+      kind?: StorageAsset['kind'];
+    }
+  ) =>
+    requestJson<{ asset: StorageAsset }>(`/api/storage/assets/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
   deleteAsset: (id: string) =>
     requestJson<{ ok: boolean }>(`/api/storage/assets/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+
+  // Image Gallery
+  listGallery: () => requestJson<{ galleryImages: GalleryImage[] }>('/api/gallery'),
+
+  uploadGalleryImage: (payload: {
+    name: string;
+    label?: string;
+    tags?: string[];
+    mimeType: string;
+    dataUrl: string;
+  }) =>
+    requestJson<{ image: GalleryImage }>('/api/gallery/upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateGalleryImage: (id: string, payload: { label?: string; tags?: string[] }) =>
+    requestJson<{ image: GalleryImage }>(`/api/gallery/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteGalleryImage: (id: string) =>
+    requestJson<{ ok: boolean }>(`/api/gallery/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  syncGalleryWithAppsScript: () =>
+    requestJson<{
+      ok: boolean;
+      uploaded: number;
+      pulled: number;
+      total: number;
+      galleryImages: GalleryImage[];
+    }>('/api/gallery/sync', { method: 'POST', body: JSON.stringify({}) }),
 
   // Generation
   generateText: (payload: {
@@ -129,8 +181,13 @@ export const workspaceApi = {
     openRouterModel?: string;
     referenceImageDataUrl?: string;
     referenceAssetId?: string;
+    galleryImageId?: string;
     saveReferenceToProduct?: boolean;
     referenceFileName?: string;
+    sceneIndex?: number;
+    totalScenes?: number;
+    storyText?: string;
+    textPlacement?: PageTextLayout;
   }) =>
     requestJson<{ record: GenerationRecord; asset: StorageAsset; product?: Product }>(
       '/api/generate/illustration',
@@ -239,6 +296,8 @@ export const workspaceApi = {
     includeBleed: boolean;
     includeTitlePage: boolean;
     includeCaptions: boolean;
+    pageLayout?: PageTextLayout;
+    includeCoverTitle?: boolean;
     rasterOverrides?: Record<string, string>;
   }) =>
     requestJson<{ artifact: ExportArtifact }>('/api/export/pdf', {

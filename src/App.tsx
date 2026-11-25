@@ -6,6 +6,7 @@ import {
   Cpu,
   FileDown,
   FolderKanban,
+  Images,
   KeyRound,
   Layers,
   Menu,
@@ -15,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  GalleryImage,
   GenerationMode,
   KdpTrimSize,
   ModuleId,
@@ -32,6 +34,7 @@ import {
 import { LibraryView } from './components/LibraryView';
 import { TrendsView } from './components/TrendsView';
 import { ProductBuilderView, type BuilderStep } from './components/ProductBuilderView';
+import { ImageGalleryView } from './components/ImageGalleryView';
 import { StorageView } from './components/StorageView';
 import { GenerationView } from './components/GenerationView';
 import { PlanningView } from './components/PlanningView';
@@ -51,6 +54,7 @@ const NAV_ITEMS: Array<{
   { id: 'library', group: 'create', label: 'My Products', caption: 'Catalog & Books', icon: BookOpen },
   { id: 'trends', group: 'create', label: 'Market Trends', caption: 'Find Niches', icon: TrendingUp },
   { id: 'builder', group: 'create', label: 'Product Builder', caption: '4-Step Flow', icon: Layers },
+  { id: 'gallery', group: 'create', label: 'Image Gallery', caption: 'Saved Photos', icon: Images },
   { id: 'generation', group: 'tools', label: 'Prompt Studio', caption: 'Photo & AI Art', icon: Sparkles },
   { id: 'planning', group: 'tools', label: 'Batch Plans', caption: 'Multi-Step Plans', icon: CalendarRange },
   { id: 'jobs', group: 'tools', label: 'Job Queue', caption: 'Background Runs', icon: Cpu },
@@ -65,6 +69,7 @@ function getInitialModuleFromPath(): ModuleId {
     'library',
     'trends',
     'builder',
+    'gallery',
     'storage',
     'generation',
     'planning',
@@ -79,6 +84,7 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>(() => getInitialModuleFromPath());
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [builderStep, setBuilderStep] = useState<BuilderStep | undefined>(undefined);
+  const [builderGalleryImageId, setBuilderGalleryImageId] = useState<string | null>(null);
   const [promptPrefill, setPromptPrefill] = useState<PromptPrefillRequest | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -282,6 +288,28 @@ export default function App() {
     setActiveProductId(req.productId);
     setGenerationInitialMode(req.mode);
     setPromptPrefill({ ...req, nonce: Date.now() });
+    setActiveModule('generation');
+  };
+
+  const handleUseGalleryImageInBuilder = (img: GalleryImage) => {
+    setBuilderGalleryImageId(img.id);
+    setBuilderStep(2);
+    setActiveModule('builder');
+    showNotice(`Attached "${img.label}" from your Image Gallery — click Generate All Pages From Photo.`);
+  };
+
+  const handleGeneratePagesFromGalleryImage = (img: GalleryImage) => {
+    const targetId = activeProductId || workspace?.products[0]?.id || '';
+    setGenerationInitialMode('illustration');
+    setPromptPrefill({
+      productId: targetId,
+      mode: 'illustration',
+      prompt: `Children's picture book illustration starring the character from "${img.label}" in a vibrant new scene and playful pose.`,
+      assetKind: 'illustration',
+      galleryImageId: img.id,
+      label: `Multi-page from ${img.label}`,
+      nonce: Date.now(),
+    });
     setActiveModule('generation');
   };
 
@@ -759,11 +787,14 @@ export default function App() {
                 <ProductBuilderView
                   products={workspace.products}
                   assets={workspace.assets}
+                  galleryImages={workspace.galleryImages ?? []}
                   generations={workspace.generations}
                   exportsList={workspace.exports}
                   settings={workspace.settings}
                   activeProductId={activeProductId}
                   initialStep={builderStep}
+                  initialGalleryImageId={builderGalleryImageId}
+                  onClearInitialGalleryImage={() => setBuilderGalleryImageId(null)}
                   googleConnected={googleConnected}
                   onSelectProduct={setActiveProductId}
                   onCreateProduct={async (payload) => {
@@ -807,6 +838,13 @@ export default function App() {
                     await refreshWorkspace();
                     showNotice(`Uploaded "${asset.name}" to your product.`);
                   }}
+                  onUpdateAsset={async (id, payload) => {
+                    await workspaceApi.updateAsset(id, payload);
+                    await refreshWorkspace();
+                    if (payload.storyText !== undefined || payload.textPlacement !== undefined) {
+                      showNotice('Saved page story text and placement.');
+                    }
+                  }}
                   onDeleteAsset={async (assetId) => {
                     await workspaceApi.deleteAsset(assetId);
                     await refreshWorkspace();
@@ -828,7 +866,46 @@ export default function App() {
                     handleUploadToDrive({ artifactId })
                   }
                   onOpenInPromptStudio={openPromptStudioWithPrefill}
+                  onOpenGallery={() => setActiveModule('gallery')}
                   onGoToTrends={() => setActiveModule('trends')}
+                />
+              )}
+
+              {activeModule === 'gallery' && (
+                <ImageGalleryView
+                  galleryImages={workspace.galleryImages ?? []}
+                  products={workspace.products}
+                  activeProductId={activeProductId}
+                  settings={workspace.settings}
+                  onUploadGalleryImage={async (payload) => {
+                    const { image } = await workspaceApi.uploadGalleryImage(payload);
+                    await refreshWorkspace();
+                    showNotice(
+                      image.driveFileId
+                        ? `Uploaded "${image.label}" to your gallery & backed up to Google Drive.`
+                        : `Saved "${image.label}" to your Image Gallery.`
+                    );
+                    return image;
+                  }}
+                  onUpdateGalleryImage={async (id, payload) => {
+                    await workspaceApi.updateGalleryImage(id, payload);
+                    await refreshWorkspace();
+                    showNotice('Updated gallery photo details.');
+                  }}
+                  onDeleteGalleryImage={async (id) => {
+                    await workspaceApi.deleteGalleryImage(id);
+                    await refreshWorkspace();
+                    showNotice('Deleted photo from Image Gallery.');
+                  }}
+                  onSyncGallery={async () => {
+                    const res = await workspaceApi.syncGalleryWithAppsScript();
+                    await refreshWorkspace();
+                    showNotice(
+                      `Gallery synced with Apps Script (${res.uploaded} uploaded, ${res.pulled} pulled, ${res.total} total).`
+                    );
+                  }}
+                  onUseInBuilder={handleUseGalleryImageInBuilder}
+                  onGeneratePagesFromPhoto={handleGeneratePagesFromGalleryImage}
                 />
               )}
 
@@ -858,6 +935,7 @@ export default function App() {
                 <GenerationView
                   products={workspace.products}
                   assets={workspace.assets}
+                  galleryImages={workspace.galleryImages ?? []}
                   generations={workspace.generations}
                   settings={workspace.settings}
                   activeProductId={activeProductId}
@@ -866,6 +944,7 @@ export default function App() {
                   onClearPrefill={() => setPromptPrefill(null)}
                   onSelectProduct={setActiveProductId}
                   onQuickCreateProduct={(title) => handleQuickCreateProduct({ title })}
+                  onOpenGallery={() => setActiveModule('gallery')}
                   onGenerateText={async (payload) => {
                     await workspaceApi.generateText(payload);
                     await refreshWorkspace();

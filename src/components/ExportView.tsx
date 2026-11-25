@@ -9,6 +9,7 @@ import {
 import type {
   ExportArtifact,
   KdpTrimSize,
+  PageTextLayout,
   Product,
   StorageAsset,
 } from '../types/workspace';
@@ -31,6 +32,8 @@ interface ExportViewProps {
     includeBleed: boolean;
     includeTitlePage: boolean;
     includeCaptions: boolean;
+    pageLayout?: PageTextLayout;
+    includeCoverTitle?: boolean;
     rasterOverrides?: Record<string, string>;
   }) => Promise<ExportArtifact>;
   onExportBundle: (payload: {
@@ -57,7 +60,7 @@ export function ExportView({
   const productAssets = useMemo(
     () =>
       assets
-        .filter((a) => a.productId === productId)
+        .filter((a) => a.productId === productId && a.kind !== 'reference')
         .sort((a, b) => a.pageOrder - b.pageOrder),
     [assets, productId]
   );
@@ -65,7 +68,12 @@ export function ExportView({
   const [trimSize, setTrimSize] = useState<KdpTrimSize>(product?.trimSize ?? '8.5x8.5');
   const [includeBleed, setIncludeBleed] = useState<boolean>(product?.includeBleed ?? true);
   const [includeTitlePage, setIncludeTitlePage] = useState(true);
-  const [includeCaptions, setIncludeCaptions] = useState(true);
+  const [includeCoverTitle, setIncludeCoverTitle] = useState(true);
+  const [pageLayout, setPageLayout] = useState<PageTextLayout>(
+    product?.category === 'coloring-book' || product?.category === 'art-print'
+      ? 'none'
+      : 'below-image'
+  );
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [buildingPdf, setBuildingPdf] = useState(false);
   const [buildingZip, setBuildingZip] = useState(false);
@@ -79,6 +87,11 @@ export function ExportView({
     if (product) {
       setTrimSize(product.trimSize);
       setIncludeBleed(product.includeBleed);
+      setPageLayout(
+        product.category === 'coloring-book' || product.category === 'art-print'
+          ? 'none'
+          : 'below-image'
+      );
     }
     setSelectedAssetIds(productAssets.map((a) => a.id));
   }, [product, productAssets]);
@@ -114,7 +127,9 @@ export function ExportView({
         trimSize,
         includeBleed,
         includeTitlePage,
-        includeCaptions,
+        includeCaptions: pageLayout !== 'none',
+        pageLayout,
+        includeCoverTitle,
         rasterOverrides,
       });
       setLatestArtifact(artifact);
@@ -215,6 +230,27 @@ export function ExportView({
             </div>
           </div>
 
+          <div>
+            <label htmlFor="export-page-layout" className="block text-xs font-medium text-slate-700">
+              Illustrated Book Text Placement
+            </label>
+            <select
+              id="export-page-layout"
+              value={pageLayout}
+              onChange={(e) => setPageLayout(e.target.value as PageTextLayout)}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-blue-700 focus:outline-none"
+            >
+              <option value="below-image">Below Illustration — Classic Picture Book (Recommended)</option>
+              <option value="overlay-bottom">Story Card Over Art — Bottom Banner</option>
+              <option value="overlay-top">Story Card Over Art — Top Banner</option>
+              <option value="facing-page">Facing-Page Spread — Story Left, Full Art Right</option>
+              <option value="none">Artwork Only — No Text (Coloring / Wall Art)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Uses each page&apos;s edited story text from Product Builder Step 3 (or automatically splits your manuscript into read-aloud pages — never prints raw AI prompts).
+            </p>
+          </div>
+
           <div className="flex flex-wrap gap-5 pt-1 text-xs text-slate-700">
             <label className="flex items-center gap-2">
               <input
@@ -237,11 +273,11 @@ export function ExportView({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={includeCaptions}
-                onChange={(e) => setIncludeCaptions(e.target.checked)}
+                checked={includeCoverTitle}
+                onChange={(e) => setIncludeCoverTitle(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-blue-700"
               />
-              Typeset Page Captions
+              Show Title on Cover
             </label>
           </div>
 
@@ -285,10 +321,12 @@ export function ExportView({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-medium text-slate-900">
-                          {asset.name}
+                          {asset.kind === 'cover' ? 'Front Cover' : `Page ${asset.pageOrder}`} · {asset.name}
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          Page {asset.pageOrder} · {formatBytes(asset.sizeBytes)}
+                        <div className="truncate text-[11px] text-slate-500">
+                          {asset.storyText
+                            ? `"${asset.storyText}"`
+                            : `${formatBytes(asset.sizeBytes)} · Auto-filled from manuscript if available`}
                         </div>
                       </div>
                     </label>

@@ -2,6 +2,7 @@ export type ModuleId =
   | 'library'
   | 'trends'
   | 'builder'
+  | 'gallery'
   | 'storage'
   | 'generation'
   | 'planning'
@@ -170,6 +171,7 @@ export interface PromptPrefillRequest {
   prompt: string;
   stylePreset?: string;
   assetKind?: AssetKind;
+  galleryImageId?: string;
   label?: string;
   nonce: number;
 }
@@ -185,6 +187,13 @@ export interface StorageFolder {
 
 export type AssetKind = 'cover' | 'illustration' | 'manuscript' | 'export' | 'reference';
 
+export type PageTextLayout =
+  | 'below-image'
+  | 'overlay-bottom'
+  | 'overlay-top'
+  | 'facing-page'
+  | 'none';
+
 export interface StorageAsset {
   id: string;
   folderId: string;
@@ -195,9 +204,25 @@ export interface StorageAsset {
   sizeBytes: number;
   url: string;
   caption: string;
+  storyText?: string;
+  textPlacement?: PageTextLayout;
   pageOrder: number;
   driveFileId: string | null;
   driveWebLink: string | null;
+  createdAt: string;
+}
+
+export interface GalleryImage {
+  id: string;
+  name: string;
+  label: string;
+  tags: string[];
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  driveFileId: string | null;
+  driveWebLink: string | null;
+  driveDownloadUrl: string | null;
   createdAt: string;
 }
 
@@ -313,6 +338,7 @@ export interface WorkspaceSnapshot {
   products: Product[];
   folders: StorageFolder[];
   assets: StorageAsset[];
+  galleryImages: GalleryImage[];
   generations: GenerationRecord[];
   plans: BatchPlan[];
   jobs: JobItem[];

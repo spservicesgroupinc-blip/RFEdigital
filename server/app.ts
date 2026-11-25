@@ -5,6 +5,7 @@ import path from 'node:path';
 import express from 'express';
 import {
   EXPORTS_DIR,
+  GALLERY_DIR,
   IS_SERVERLESS,
   UPLOADS_DIR,
   resolveSafeChildPath,
@@ -24,6 +25,7 @@ import { buildAssetBundleZip, buildKdpPdfBuffer } from './pdfExport.js';
 import {
   callAppsScriptHealth,
   callAppsScriptPost,
+  isAppsScriptConfigured,
   readCodeGsSource,
 } from './appsScriptBridge.js';
 import {
@@ -32,6 +34,7 @@ import {
   expandPlanToJobs,
   getNextRunnableJob,
   mapTrendOpportunityToProjectSeed,
+  parseManuscriptIntoPageTexts,
   sanitizeFolderSlug,
   transitionJobStatus,
   validateProductInput,
@@ -42,10 +45,12 @@ import type {
   ApiTokenRecord,
   BatchPlan,
   ExportArtifact,
+  GalleryImage,
   GenerationMode,
   GenerationProvider,
   JobItem,
   KdpTrimSize,
+  PageTextLayout,
   Product,
   ProductCategory,
   ProductPromptPack,
@@ -140,9 +145,155 @@ function sanitizePromptPack(raw: unknown): ProductPromptPack | null {
   };
 }
 
+const VALID_PAGE_TEXT_LAYOUTS: PageTextLayout[] = [
+  'below-image',
+  'overlay-bottom',
+  'overlay-top',
+  'facing-page',
+  'none',
+];
+
+function isValidPageTextLayout(val: unknown): val is PageTextLayout {
+  return typeof val === 'string' && VALID_PAGE_TEXT_LAYOUTS.includes(val as PageTextLayout);
+}
+
+function sanitizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    if (typeof raw === 'string') {
+      return raw
+        .split(',')
+        .map((t) => t.trim().slice(0, 32))
+        .filter(Boolean)
+        .slice(0, 12);
+    }
+    return [];
+  }
+  return raw
+    .map((t) => String(t ?? '').trim().slice(0, 32))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+async function backupGalleryImageToAppsScript(
+  image: GalleryImage,
+  base64Data: string
+): Promise<void> {
+  if (!isAppsScriptConfigured()) return;
+  try {
+    const res = await callAppsScriptPost<{
+      ok: boolean;
+      image?: {
+        driveFileId?: string;
+        driveWebLink?: string;
+        driveDownloadUrl?: string;
+      };
+    }>('uploadGalleryImage', {
+      id: image.id,
+      name: image.name,
+      label: image.label,
+      tags: image.tags,
+      mimeType: image.mimeType,
+      sizeBytes: image.sizeBytes,
+      base64Data,
+      createdAt: image.createdAt,
+    });
+    if (res.image?.driveFileId) {
+      image.driveFileId = res.image.driveFileId;
+      image.driveWebLink = res.image.driveWebLink ?? null;
+      image.driveDownloadUrl = res.image.driveDownloadUrl ?? null;
+      workspaceStore.save();
+    }
+  } catch (err) {
+    console.warn(
+      '[FolioPress Gallery] Apps Script backup skipped:',
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+function saveGalleryImageLocal(input: {
+  name?: string;
+  label?: string;
+  tags?: unknown;
+  mimeType?: string;
+  dataUrl: string;
+}): { image: GalleryImage; base64Data: string } {
+  const { buffer, mimeType, ext } = parseAndValidatePhotoDataUrl(input.dataUrl, input.mimeType);
+  const cleanOriginal = (input.name || 'photo').replace(/\.[^.]+$/, '').trim();
+  const cleanBase = sanitizeFolderSlug(cleanOriginal || 'photo').slice(0, 36);
+  const storedName = `gal-${cleanBase}-${crypto.randomUUID().slice(0, 6)}${ext}`;
+  const safePath = resolveSafeChildPath(GALLERY_DIR, storedName);
+  fs.writeFileSync(safePath, buffer);
+
+  const label =
+    typeof input.label === 'string' && input.label.trim()
+      ? input.label.trim().slice(0, 100)
+      : cleanOriginal.slice(0, 100) || storedName;
+
+  const image: GalleryImage = {
+    id: `gal-${crypto.randomUUID().slice(0, 8)}`,
+    name: storedName,
+    label,
+    tags: sanitizeTags(input.tags),
+    mimeType,
+    sizeBytes: buffer.byteLength,
+    url: `/api/gallery/files/${storedName}`,
+    driveFileId: null,
+    driveWebLink: null,
+    driveDownloadUrl: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  const raw = workspaceStore.getRaw();
+  raw.galleryImages.unshift(image);
+  return { image, base64Data: buffer.toString('base64') };
+}
+
+async function readGalleryImageAsDataUrl(image: GalleryImage | undefined): Promise<string | undefined> {
+  if (!image) return undefined;
+  const normalizedMime = image.mimeType.toLowerCase();
+  if (!REFERENCE_MIME_EXT[normalizedMime]) return undefined;
+
+  try {
+    const filename = path.basename(image.url);
+    const safePath = resolveSafeChildPath(GALLERY_DIR, filename);
+    if (fs.existsSync(safePath)) {
+      const buf = fs.readFileSync(safePath);
+      if (buf.byteLength > 0 && buf.byteLength <= MAX_UPLOAD_BYTES) {
+        return `data:${normalizedMime};base64,${buf.toString('base64')}`;
+      }
+    }
+
+    // Serverless cold-start fallback: recover binary from Google Drive via Apps Script
+    if (image.driveFileId && isAppsScriptConfigured()) {
+      const fetched = await callAppsScriptPost<{
+        ok: boolean;
+        mimeType?: string;
+        base64Data?: string;
+      }>('getGalleryImage', { driveFileId: image.driveFileId });
+
+      if (fetched.base64Data) {
+        const buf = Buffer.from(fetched.base64Data, 'base64');
+        if (buf.byteLength > 0 && buf.byteLength <= MAX_UPLOAD_BYTES) {
+          try {
+            fs.writeFileSync(safePath, buf);
+          } catch {
+            // Non-fatal cache write error
+          }
+          const mime = (fetched.mimeType || normalizedMime).toLowerCase();
+          return `data:${mime === 'image/jpg' ? 'image/jpeg' : mime};base64,${fetched.base64Data}`;
+        }
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 function saveReferencePhotoAsset(
   product: Product,
-  photo: { name?: string; mimeType?: string; dataUrl: string; caption?: string }
+  photo: { name?: string; mimeType?: string; dataUrl: string; caption?: string; saveToGallery?: boolean }
 ): StorageAsset {
   const { buffer, mimeType, ext } = parseAndValidatePhotoDataUrl(photo.dataUrl, photo.mimeType);
   const cleanBase = sanitizeFolderSlug((photo.name || 'reference-photo').replace(/\.[^.]+$/, '')).slice(0, 32);
@@ -174,6 +325,25 @@ function saveReferencePhotoAsset(
 
   raw.assets.push(asset);
   product.referenceAssetId = asset.id;
+
+  // Also store in the central Image Gallery so the user can reuse this photo across any book
+  if (photo.saveToGallery !== false) {
+    const labelGuess = (photo.name || `${product.title} Photo`).replace(/\.[^.]+$/, '').trim();
+    const alreadyExists = raw.galleryImages.some(
+      (g) => g.sizeBytes === buffer.byteLength && g.label.toLowerCase() === labelGuess.toLowerCase()
+    );
+    if (!alreadyExists) {
+      const { image, base64Data } = saveGalleryImageLocal({
+        name: photo.name || `${product.title}-photo`,
+        label: labelGuess,
+        tags: [product.title.slice(0, 28)],
+        mimeType,
+        dataUrl: photo.dataUrl,
+      });
+      void backupGalleryImageToAppsScript(image, base64Data);
+    }
+  }
+
   return asset;
 }
 
@@ -270,12 +440,23 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
             ? 'openrouter'
             : 'gemini';
 
+      const existingIllustrations = raw.assets.filter(
+        (a) => a.productId === product.id && a.kind !== 'reference'
+      );
+      const isCoverJob = /cover/i.test(job.title) && !product.coverAssetId;
+      const sceneIdx = existingIllustrations.filter((a) => a.kind !== 'cover').length;
+
       const generated = await generateStorybookIllustration({
         prompt: job.prompt,
-        stylePreset: '3D Animated Storybook Cartoon — charming expressive character, rich lighting, polished children’s book art',
+        stylePreset:
+          product.promptPack?.artStylePreset ||
+          '3D Animated Storybook Cartoon — charming expressive character, rich lighting, polished children’s book art',
         provider: effectiveProvider,
         productTitle: product.title,
         referenceImageDataUrl,
+        sceneIndex: isCoverJob ? undefined : sceneIdx,
+        totalScenes: Math.max(4, product.promptPack?.interiorPrompts.length ?? 4),
+        isCover: isCoverJob,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
@@ -285,17 +466,21 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
       fs.writeFileSync(targetPath, generated.buffer);
 
+      const manuscriptPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
+      const autoStoryText = !isCoverJob ? manuscriptPages[sceneIdx] ?? '' : '';
+
       const productAssets = raw.assets.filter((a) => a.productId === product.id);
       const asset: StorageAsset = {
         id: `asset-${crypto.randomUUID().slice(0, 8)}`,
         folderId: folder.id,
         productId: product.id,
         name: fileName,
-        kind: 'illustration',
+        kind: isCoverJob ? 'cover' : 'illustration',
         mimeType: generated.mimeType,
         sizeBytes: generated.buffer.byteLength,
         url: `/api/storage/files/${fileName}`,
         caption: generated.caption,
+        storyText: autoStoryText || undefined,
         pageOrder: productAssets.length + 1,
         driveFileId: null,
         driveWebLink: null,
@@ -303,7 +488,7 @@ async function executeSingleJob(job: JobItem): Promise<JobItem> {
       };
 
       raw.assets.push(asset);
-      if (!product.coverAssetId) {
+      if (asset.kind === 'cover' || !product.coverAssetId) {
         product.coverAssetId = asset.id;
       }
       raw.generations.unshift({
@@ -690,6 +875,22 @@ export function createApiApp(): express.Express {
     raw.assets.push(asset);
     if (asset.kind === 'reference') {
       product.referenceAssetId = asset.id;
+      if (REFERENCE_MIME_EXT[safeMime]) {
+        const labelGuess = (name || `${product.title} Photo`).replace(/\.[^.]+$/, '').trim();
+        const dup = raw.galleryImages.some(
+          (g) => g.sizeBytes === buffer.byteLength && g.label.toLowerCase() === labelGuess.toLowerCase()
+        );
+        if (!dup) {
+          const { image, base64Data } = saveGalleryImageLocal({
+            name: name || storedName,
+            label: labelGuess,
+            tags: [product.title.slice(0, 28)],
+            mimeType: safeMime,
+            dataUrl,
+          });
+          void backupGalleryImageToAppsScript(image, base64Data);
+        }
+      }
     } else if (asset.kind === 'cover' || !product.coverAssetId) {
       product.coverAssetId = asset.id;
     }
@@ -706,6 +907,47 @@ export function createApiApp(): express.Express {
     } catch {
       res.status(400).json({ error: 'Invalid file request.' });
     }
+  });
+
+  app.patch('/api/storage/assets/:id', (req, res) => {
+    const raw = workspaceStore.getRaw();
+    const asset = raw.assets.find((a) => a.id === req.params.id);
+    if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+
+    const { storyText, textPlacement, caption, pageOrder, kind } = req.body as {
+      storyText?: string;
+      textPlacement?: PageTextLayout | '';
+      caption?: string;
+      pageOrder?: number;
+      kind?: StorageAsset['kind'];
+    };
+
+    if (typeof storyText === 'string') {
+      asset.storyText = storyText.trim().slice(0, 1600);
+    }
+    if (textPlacement === '') {
+      asset.textPlacement = undefined;
+    } else if (isValidPageTextLayout(textPlacement)) {
+      asset.textPlacement = textPlacement;
+    }
+    if (typeof caption === 'string') {
+      asset.caption = caption.trim().slice(0, 240);
+    }
+    if (typeof pageOrder === 'number' && Number.isFinite(pageOrder) && pageOrder >= 1 && pageOrder <= 999) {
+      asset.pageOrder = Math.round(pageOrder);
+    }
+    if (
+      kind === 'cover' ||
+      kind === 'illustration' ||
+      kind === 'manuscript' ||
+      kind === 'export' ||
+      kind === 'reference'
+    ) {
+      asset.kind = kind;
+    }
+
+    workspaceStore.save();
+    res.json({ asset });
   });
 
   app.delete('/api/storage/assets/:id', (req, res) => {
@@ -725,6 +967,210 @@ export function createApiApp(): express.Express {
     raw.assets = raw.assets.filter((a) => a.id !== req.params.id);
     workspaceStore.save();
     res.json({ ok: true });
+  });
+
+  // --- Uploaded Image Gallery (Reusable Reference Photos + Apps Script Drive Sync) ---
+  app.get('/api/gallery', (_req, res) => {
+    res.json({ galleryImages: workspaceStore.getSnapshot().galleryImages });
+  });
+
+  app.post('/api/gallery/upload', async (req, res) => {
+    const { name, label, tags, mimeType, dataUrl } = req.body as {
+      name?: string;
+      label?: string;
+      tags?: unknown;
+      mimeType?: string;
+      dataUrl?: string;
+    };
+
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ error: 'Upload a valid PNG, JPEG, or WebP image.' });
+    }
+
+    try {
+      const { image, base64Data } = saveGalleryImageLocal({
+        name,
+        label,
+        tags,
+        mimeType,
+        dataUrl,
+      });
+      workspaceStore.save();
+
+      // Backup to Google Drive & Image_Gallery sheet via Apps Script if configured
+      await backupGalleryImageToAppsScript(image, base64Data);
+
+      res.status(201).json({ image });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : 'Invalid gallery image upload.',
+      });
+    }
+  });
+
+  app.get('/api/gallery/files/:filename', async (req, res) => {
+    try {
+      const filename = path.basename(req.params.filename);
+      const safePath = resolveSafeChildPath(GALLERY_DIR, filename);
+      if (fs.existsSync(safePath)) {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        return res.sendFile(safePath);
+      }
+
+      // Cold-start recovery from Google Drive via Apps Script
+      const raw = workspaceStore.getRaw();
+      const record = raw.galleryImages.find((g) => path.basename(g.url) === filename);
+      if (record?.driveFileId && isAppsScriptConfigured()) {
+        const fetched = await callAppsScriptPost<{
+          ok: boolean;
+          mimeType?: string;
+          base64Data?: string;
+        }>('getGalleryImage', { driveFileId: record.driveFileId });
+
+        if (fetched.base64Data) {
+          const buf = Buffer.from(fetched.base64Data, 'base64');
+          try {
+            fs.writeFileSync(safePath, buf);
+          } catch {
+            // Ignore cache write error
+          }
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.setHeader('Content-Type', fetched.mimeType || record.mimeType || 'image/png');
+          return res.send(buf);
+        }
+      }
+
+      return res.status(404).json({ error: 'Gallery image not found.' });
+    } catch {
+      return res.status(400).json({ error: 'Invalid gallery filename.' });
+    }
+  });
+
+  app.patch('/api/gallery/:id', (req, res) => {
+    const raw = workspaceStore.getRaw();
+    const image = raw.galleryImages.find((g) => g.id === req.params.id);
+    if (!image) return res.status(404).json({ error: 'Gallery image not found.' });
+
+    const { label, tags } = req.body as { label?: string; tags?: unknown };
+    if (typeof label === 'string' && label.trim()) {
+      image.label = label.trim().slice(0, 100);
+    }
+    if (tags !== undefined) {
+      image.tags = sanitizeTags(tags);
+    }
+    workspaceStore.save();
+    res.json({ image });
+  });
+
+  app.delete('/api/gallery/:id', async (req, res) => {
+    const raw = workspaceStore.getRaw();
+    const image = raw.galleryImages.find((g) => g.id === req.params.id);
+    if (!image) return res.status(404).json({ error: 'Gallery image not found.' });
+
+    try {
+      const safePath = resolveSafeChildPath(GALLERY_DIR, path.basename(image.url));
+      if (fs.existsSync(safePath)) fs.unlinkSync(safePath);
+    } catch {
+      // Ignore cleanup mismatch
+    }
+
+    if (image.driveFileId && isAppsScriptConfigured()) {
+      try {
+        await callAppsScriptPost('deleteGalleryImage', {
+          id: image.id,
+          driveFileId: image.driveFileId,
+        });
+      } catch {
+        // Non-blocking remote delete failure
+      }
+    }
+
+    raw.galleryImages = raw.galleryImages.filter((g) => g.id !== req.params.id);
+    workspaceStore.save();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/gallery/sync', async (_req, res) => {
+    if (!isAppsScriptConfigured()) {
+      return res.status(400).json({
+        error: 'Configure APPS_SCRIPT_WEBAPP_URL in Settings & Sync before syncing the gallery.',
+      });
+    }
+
+    try {
+      const raw = workspaceStore.getRaw();
+      let uploaded = 0;
+
+      // 1. Push any local gallery images that do not yet have a Drive file ID
+      for (const img of raw.galleryImages) {
+        if (!img.driveFileId) {
+          const safePath = resolveSafeChildPath(GALLERY_DIR, path.basename(img.url));
+          if (fs.existsSync(safePath)) {
+            const base64Data = fs.readFileSync(safePath).toString('base64');
+            await backupGalleryImageToAppsScript(img, base64Data);
+            if (img.driveFileId) uploaded += 1;
+          }
+        }
+      }
+
+      // 2. Pull any remote Image_Gallery records stored in Google Sheets / Drive
+      const remote = await callAppsScriptPost<{
+        ok: boolean;
+        images?: Array<{
+          id?: string;
+          name?: string;
+          label?: string;
+          tags?: string[];
+          mimeType?: string;
+          sizeBytes?: number;
+          driveFileId?: string;
+          driveWebLink?: string;
+          driveDownloadUrl?: string;
+          createdAt?: string;
+        }>;
+      }>('listGalleryImages', {});
+
+      let pulled = 0;
+      for (const item of remote.images ?? []) {
+        if (!item.id || !item.driveFileId) continue;
+        const exists = raw.galleryImages.some(
+          (g) => g.id === item.id || (item.driveFileId && g.driveFileId === item.driveFileId)
+        );
+        if (!exists) {
+          const ext = REFERENCE_MIME_EXT[(item.mimeType || 'image/png').toLowerCase()] || '.png';
+          const storedName = item.name && !item.name.includes('/')
+            ? item.name
+            : `gal-${sanitizeFolderSlug(item.label || item.id).slice(0, 32)}${ext}`;
+          raw.galleryImages.push({
+            id: item.id,
+            name: storedName,
+            label: item.label || storedName,
+            tags: sanitizeTags(item.tags),
+            mimeType: item.mimeType || 'image/png',
+            sizeBytes: Number(item.sizeBytes || 0),
+            url: `/api/gallery/files/${storedName}`,
+            driveFileId: item.driveFileId,
+            driveWebLink: item.driveWebLink || null,
+            driveDownloadUrl: item.driveDownloadUrl || null,
+            createdAt: item.createdAt || new Date().toISOString(),
+          });
+          pulled += 1;
+        }
+      }
+
+      workspaceStore.save();
+      res.json({
+        ok: true,
+        uploaded,
+        pulled,
+        total: raw.galleryImages.length,
+        galleryImages: raw.galleryImages,
+      });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Apps Script gallery sync failed.',
+      });
+    }
   });
 
   // --- Module 4: Generation (Server-side Gemini + OpenRouter) ---
@@ -799,8 +1245,13 @@ export function createApiApp(): express.Express {
       openRouterModel,
       referenceImageDataUrl,
       referenceAssetId,
+      galleryImageId,
       saveReferenceToProduct,
       referenceFileName,
+      sceneIndex,
+      totalScenes,
+      storyText,
+      textPlacement,
     } = req.body as {
       productId?: string;
       prompt?: string;
@@ -810,8 +1261,13 @@ export function createApiApp(): express.Express {
       openRouterModel?: string;
       referenceImageDataUrl?: string;
       referenceAssetId?: string;
+      galleryImageId?: string;
       saveReferenceToProduct?: boolean;
       referenceFileName?: string;
+      sceneIndex?: number;
+      totalScenes?: number;
+      storyText?: string;
+      textPlacement?: PageTextLayout;
     };
 
     const raw = workspaceStore.getRaw();
@@ -838,6 +1294,9 @@ export function createApiApp(): express.Express {
           error: err instanceof Error ? err.message : 'Invalid reference photo upload.',
         });
       }
+    } else if (typeof galleryImageId === 'string' && galleryImageId.trim()) {
+      const galImg = raw.galleryImages.find((g) => g.id === galleryImageId.trim());
+      resolvedReferenceDataUrl = await readGalleryImageAsDataUrl(galImg);
     } else if (typeof referenceAssetId === 'string' && referenceAssetId.trim()) {
       const refAsset = raw.assets.find(
         (a) => a.id === referenceAssetId && a.productId === product.id
@@ -855,6 +1314,21 @@ export function createApiApp(): express.Express {
               ? 'openrouter'
               : 'gemini';
 
+      const isCover = kind === 'cover';
+      const existingInteriorCount = raw.assets.filter(
+        (a) => a.productId === product.id && a.kind !== 'reference' && a.kind !== 'cover'
+      ).length;
+      const resolvedSceneIndex =
+        typeof sceneIndex === 'number' && Number.isFinite(sceneIndex) && sceneIndex >= 0
+          ? Math.floor(sceneIndex)
+          : isCover
+            ? undefined
+            : existingInteriorCount;
+      const resolvedTotalScenes =
+        typeof totalScenes === 'number' && Number.isFinite(totalScenes) && totalScenes >= 1
+          ? Math.floor(totalScenes)
+          : Math.max(4, product.promptPack?.interiorPrompts.length ?? 4);
+
       const generated = await generateStorybookIllustration({
         prompt: prompt.trim(),
         stylePreset:
@@ -864,6 +1338,9 @@ export function createApiApp(): express.Express {
         productTitle: product.title,
         referenceImageDataUrl: resolvedReferenceDataUrl,
         openRouterModel: typeof openRouterModel === 'string' ? openRouterModel.trim() : undefined,
+        sceneIndex: resolvedSceneIndex,
+        totalScenes: resolvedTotalScenes,
+        isCover,
       });
 
       const folder = workspaceStore.ensureProductFolder(product);
@@ -873,17 +1350,29 @@ export function createApiApp(): express.Express {
       const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
       fs.writeFileSync(targetPath, generated.buffer);
 
+      // Attach explicit storyText, or auto-assign the matching read-aloud page text from manuscript
+      let resolvedStoryText = typeof storyText === 'string' ? storyText.trim().slice(0, 1600) : '';
+      if (!resolvedStoryText && !isCover) {
+        const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
+        const matchIdx = resolvedSceneIndex ?? existingInteriorCount;
+        if (parsedPages[matchIdx]) {
+          resolvedStoryText = parsedPages[matchIdx];
+        }
+      }
+
       const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
       const asset: StorageAsset = {
         id: `asset-${crypto.randomUUID().slice(0, 8)}`,
         folderId: folder.id,
         productId: product.id,
         name: fileName,
-        kind: kind === 'cover' ? 'cover' : 'illustration',
+        kind: isCover ? 'cover' : 'illustration',
         mimeType: generated.mimeType,
         sizeBytes: generated.buffer.byteLength,
         url: `/api/storage/files/${fileName}`,
         caption: generated.caption,
+        storyText: resolvedStoryText || undefined,
+        textPlacement: isValidPageTextLayout(textPlacement) ? textPlacement : undefined,
         pageOrder: existingCount + 1,
         driveFileId: null,
         driveWebLink: null,
@@ -1457,6 +1946,8 @@ export function createApiApp(): express.Express {
       includeBleed,
       includeTitlePage,
       includeCaptions,
+      pageLayout,
+      includeCoverTitle,
       rasterOverrides,
     } = req.body as {
       productId?: string;
@@ -1465,6 +1956,8 @@ export function createApiApp(): express.Express {
       includeBleed?: boolean;
       includeTitlePage?: boolean;
       includeCaptions?: boolean;
+      pageLayout?: PageTextLayout;
+      includeCoverTitle?: boolean;
       rasterOverrides?: Record<string, string>;
     };
 
@@ -1475,7 +1968,7 @@ export function createApiApp(): express.Express {
     const orderedAssets =
       Array.isArray(assetIds) && assetIds.length > 0
         ? assetIds
-            .map((id) => raw.assets.find((a) => a.id === id && a.productId === product.id))
+            .map((id) => raw.assets.find((a) => a.id === id && a.productId === product.id && a.kind !== 'reference'))
             .filter((a): a is StorageAsset => Boolean(a))
         : raw.assets
             .filter((a) => a.productId === product.id && a.kind !== 'reference')
@@ -1494,6 +1987,8 @@ export function createApiApp(): express.Express {
         includeBleed: Boolean(includeBleed ?? product.includeBleed),
         includeTitlePage: Boolean(includeTitlePage ?? true),
         includeCaptions: Boolean(includeCaptions ?? true),
+        pageLayout: isValidPageTextLayout(pageLayout) ? pageLayout : undefined,
+        includeCoverTitle: includeCoverTitle !== false,
         authorImprint: raw.settings.authorImprint,
         rasterOverrides,
       });
@@ -1667,6 +2162,7 @@ export function createApiApp(): express.Express {
         series: raw.series,
         assets: raw.assets,
         jobs: raw.jobs,
+        galleryImages: raw.galleryImages,
       });
 
       const syncedAt = result.syncedAt || new Date().toISOString();

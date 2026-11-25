@@ -6,6 +6,7 @@ import type {
   ApiTokenRecord,
   BatchPlan,
   ExportArtifact,
+  GalleryImage,
   GenerationRecord,
   JobItem,
   Product,
@@ -30,6 +31,7 @@ export const DATA_DIR = CONFIGURED_DATA_DIR
     ? path.resolve(os.tmpdir(), 'foliopress-data')
     : path.resolve(ROOT_DIR, '.data');
 export const UPLOADS_DIR = path.resolve(DATA_DIR, 'uploads');
+export const GALLERY_DIR = path.resolve(DATA_DIR, 'gallery');
 export const EXPORTS_DIR = path.resolve(DATA_DIR, 'exports');
 const DB_FILE = path.resolve(DATA_DIR, 'workspace.json');
 
@@ -45,6 +47,7 @@ function ensureDirs(): void {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    fs.mkdirSync(GALLERY_DIR, { recursive: true });
     fs.mkdirSync(EXPORTS_DIR, { recursive: true });
   } catch (err) {
     console.warn('[FolioPress Store] Directory initialization warning:', err);
@@ -78,6 +81,7 @@ function buildEmptyWorkspace(): PersistedWorkspace {
     products: [] as Product[],
     folders: [] as StorageFolder[],
     assets: [] as StorageAsset[],
+    galleryImages: [] as GalleryImage[],
     generations: [] as GenerationRecord[],
     plans: [] as BatchPlan[],
     jobs: [] as JobItem[],
@@ -109,6 +113,9 @@ class WorkspaceStore {
           }
           if (!Array.isArray(parsed.trendScans)) {
             parsed.trendScans = [];
+          }
+          if (!Array.isArray(parsed.galleryImages)) {
+            parsed.galleryImages = [];
           }
           return parsed;
         }

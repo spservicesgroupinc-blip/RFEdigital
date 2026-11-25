@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
+  BookOpen,
   Check,
   CloudUpload,
   Copy,
@@ -10,6 +13,7 @@ import {
   ExternalLink,
   FileDown,
   ImagePlus,
+  Images,
   Loader2,
   Play,
   Plus,
@@ -22,10 +26,12 @@ import {
 } from 'lucide-react';
 import type {
   ExportArtifact,
+  GalleryImage,
   GenerationMode,
   GenerationProvider,
   GenerationRecord,
   KdpTrimSize,
+  PageTextLayout,
   Product,
   ProductCategory,
   ProductPromptPack,
@@ -39,6 +45,7 @@ import {
   calculateKdpDimensionsPt,
   computeProductReadiness,
   formatBytes,
+  parseManuscriptIntoPageTexts,
   pickStylePresetForProduct,
 } from '../lib/workspaceLogic';
 import { rasterizeSvgUrlToPng } from '../lib/api';
@@ -46,14 +53,45 @@ import { AssetPreviewImage } from './AssetPreviewImage';
 
 export type BuilderStep = 1 | 2 | 3 | 4;
 
+const PAGE_LAYOUT_OPTIONS: Array<{ value: PageTextLayout; label: string; short: string }> = [
+  {
+    value: 'below-image',
+    label: 'Below Illustration — Classic Picture Book',
+    short: 'Below Art',
+  },
+  {
+    value: 'overlay-bottom',
+    label: 'Story Card Over Art — Bottom Banner',
+    short: 'Bottom Card',
+  },
+  {
+    value: 'overlay-top',
+    label: 'Story Card Over Art — Top Banner',
+    short: 'Top Card',
+  },
+  {
+    value: 'facing-page',
+    label: 'Facing-Page Spread — Story Left, Art Right',
+    short: 'Facing Spread',
+  },
+  {
+    value: 'none',
+    label: 'Artwork Only — No Text',
+    short: 'Art Only',
+  },
+];
+
 interface ProductBuilderViewProps {
   products: Product[];
   assets: StorageAsset[];
+  galleryImages: GalleryImage[];
   generations: GenerationRecord[];
   exportsList: ExportArtifact[];
   settings: WorkspaceSettings;
   activeProductId: string | null;
   initialStep?: BuilderStep;
+  initialGalleryImageId?: string | null;
+  onClearInitialGalleryImage?: () => void;
   googleConnected: boolean;
   onSelectProduct: (id: string) => void;
   onCreateProduct: (payload: {
@@ -91,6 +129,11 @@ interface ProductBuilderViewProps {
     provider: GenerationProvider;
     kind: StorageAsset['kind'];
     referenceAssetId?: string;
+    galleryImageId?: string;
+    sceneIndex?: number;
+    totalScenes?: number;
+    storyText?: string;
+    textPlacement?: PageTextLayout;
   }) => Promise<StorageAsset>;
   onUploadAsset: (payload: {
     productId: string;
@@ -100,6 +143,16 @@ interface ProductBuilderViewProps {
     kind: StorageAsset['kind'];
     caption: string;
   }) => Promise<void>;
+  onUpdateAsset: (
+    id: string,
+    payload: {
+      storyText?: string;
+      textPlacement?: PageTextLayout | '';
+      caption?: string;
+      pageOrder?: number;
+      kind?: StorageAsset['kind'];
+    }
+  ) => Promise<void>;
   onDeleteAsset: (assetId: string) => Promise<void>;
   onExportPdf: (payload: {
     productId: string;
@@ -108,6 +161,8 @@ interface ProductBuilderViewProps {
     includeBleed: boolean;
     includeTitlePage: boolean;
     includeCaptions: boolean;
+    pageLayout?: PageTextLayout;
+    includeCoverTitle?: boolean;
     rasterOverrides?: Record<string, string>;
   }) => Promise<ExportArtifact>;
   onExportBundle: (payload: {
@@ -116,6 +171,7 @@ interface ProductBuilderViewProps {
   }) => Promise<ExportArtifact>;
   onUploadArtifactToDrive: (artifactId: string) => Promise<void>;
   onOpenInPromptStudio: (req: Omit<PromptPrefillRequest, 'nonce'>) => void;
+  onOpenGallery: () => void;
   onGoToTrends: () => void;
 }
 
@@ -129,11 +185,14 @@ const STEP_META: Array<{ step: BuilderStep; title: string; short: string }> = [
 export function ProductBuilderView({
   products,
   assets,
+  galleryImages,
   generations,
   exportsList,
   settings,
   activeProductId,
   initialStep,
+  initialGalleryImageId,
+  onClearInitialGalleryImage,
   googleConnected,
   onSelectProduct,
   onCreateProduct,
@@ -142,11 +201,13 @@ export function ProductBuilderView({
   onGenerateText,
   onGenerateIllustration,
   onUploadAsset,
+  onUpdateAsset,
   onDeleteAsset,
   onExportPdf,
   onExportBundle,
   onUploadArtifactToDrive,
   onOpenInPromptStudio,
+  onOpenGallery,
   onGoToTrends,
 }: ProductBuilderViewProps) {
   const productId = activeProductId || products[0]?.id || '';
@@ -157,14 +218,24 @@ export function ProductBuilderView({
 
   const [creatingNew, setCreatingNew] = useState(products.length === 0);
   const [step, setStep] = useState<BuilderStep>(initialStep ?? (products.length === 0 ? 1 : 2));
+  const [selectedGalleryImageId, setSelectedGalleryImageId] = useState<string | null>(
+    initialGalleryImageId ?? null
+  );
 
-  // Sync external initialStep changes (e.g. landing on Step 2 from Trends)
+  // Sync external initialStep & gallery handoff changes
   useEffect(() => {
     if (initialStep) {
       setStep(initialStep);
       if (products.length > 0) setCreatingNew(false);
     }
   }, [initialStep, productId, products.length]);
+
+  useEffect(() => {
+    if (initialGalleryImageId) {
+      setSelectedGalleryImageId(initialGalleryImageId);
+      onClearInitialGalleryImage?.();
+    }
+  }, [initialGalleryImageId, onClearInitialGalleryImage]);
 
   useEffect(() => {
     if (products.length === 0) {
@@ -202,17 +273,23 @@ export function ProductBuilderView({
   const [runningKey, setRunningKey] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<string | null>(null);
 
-  // Step 3: Editable Manuscript Notes State
+  // Step 3: Illustrated Book Page Designer & Manuscript Copy State
   const [notesDraft, setNotesDraft] = useState('');
   const [notesDirty, setNotesDirty] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [copiedNotes, setCopiedNotes] = useState(false);
+  const [pageDrafts, setPageDrafts] = useState<
+    Record<string, { storyText: string; textPlacement: PageTextLayout | '' }>
+  >({});
+  const [savingAssetId, setSavingAssetId] = useState<string | null>(null);
+  const [autoFillingPages, setAutoFillingPages] = useState(false);
 
   // Step 4: Export State
   const [exportTrim, setExportTrim] = useState<KdpTrimSize>('8.5x8.5');
   const [exportBleed, setExportBleed] = useState(true);
   const [includeTitlePage, setIncludeTitlePage] = useState(true);
-  const [includeCaptions, setIncludeCaptions] = useState(true);
+  const [includeCoverTitle, setIncludeCoverTitle] = useState(true);
+  const [pageLayout, setPageLayout] = useState<PageTextLayout>('below-image');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [buildingPdf, setBuildingPdf] = useState(false);
   const [buildingZip, setBuildingZip] = useState(false);
@@ -230,6 +307,14 @@ export function ProductBuilderView({
     [assets, productId]
   );
 
+  const selectedGalleryImage = useMemo(
+    () =>
+      selectedGalleryImageId
+        ? galleryImages.find((g) => g.id === selectedGalleryImageId) ?? null
+        : null,
+    [galleryImages, selectedGalleryImageId]
+  );
+
   const savedReferenceAsset = useMemo(() => {
     if (!product) return null;
     if (product.referenceAssetId) {
@@ -238,6 +323,8 @@ export function ProductBuilderView({
     }
     return assets.find((a) => a.productId === product.id && a.kind === 'reference') ?? null;
   }, [product, assets]);
+
+  const hasActiveRefPhoto = Boolean(selectedGalleryImage || savedReferenceAsset);
 
   const coverAsset = useMemo(() => {
     if (!product) return null;
@@ -315,12 +402,27 @@ export function ProductBuilderView({
 
     setExportTrim(product.trimSize);
     setExportBleed(product.includeBleed);
+    setPageLayout(
+      product.category === 'coloring-book' || product.category === 'art-print'
+        ? 'none'
+        : 'below-image'
+    );
     setLatestArtifact(null);
   }, [product?.id, product?.updatedAt, creatingNew]);
 
   useEffect(() => {
     setSelectedAssetIds(productAssets.map((a) => a.id));
-  }, [productId, productAssets.length]);
+    setPageDrafts((prev) => {
+      const next: Record<string, { storyText: string; textPlacement: PageTextLayout | '' }> = {};
+      for (const a of productAssets) {
+        next[a.id] = prev[a.id] ?? {
+          storyText: a.storyText ?? '',
+          textPlacement: a.textPlacement ?? '',
+        };
+      }
+      return next;
+    });
+  }, [productId, productAssets]);
 
   const dims = useMemo(
     () => calculateKdpDimensionsPt(exportTrim, exportBleed),
@@ -515,6 +617,13 @@ export function ProductBuilderView({
     }
   };
 
+  const getRefPayload = () =>
+    selectedGalleryImage
+      ? { galleryImageId: selectedGalleryImage.id }
+      : savedReferenceAsset
+        ? { referenceAssetId: savedReferenceAsset.id }
+        : {};
+
   const handleGenerateCover = () =>
     runSinglePrompt('cover', async () => {
       if (!product || !editablePack?.coverPrompt.trim()) return;
@@ -524,7 +633,7 @@ export function ProductBuilderView({
         stylePreset: artStylePreset,
         provider,
         kind: 'cover',
-        referenceAssetId: savedReferenceAsset?.id,
+        ...getRefPayload(),
       });
     });
 
@@ -557,13 +666,17 @@ export function ProductBuilderView({
       if (!product || !editablePack) return;
       const item = editablePack.interiorPrompts[pageIndex];
       if (!item || !item.prompt.trim()) return;
+      const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
       const createdAsset = await onGenerateIllustration({
         productId: product.id,
         prompt: item.prompt.trim(),
         stylePreset: artStylePreset,
         provider,
         kind: 'illustration',
-        referenceAssetId: savedReferenceAsset?.id,
+        sceneIndex: pageIndex,
+        totalScenes: editablePack.interiorPrompts.length,
+        storyText: parsedPages[pageIndex] || undefined,
+        ...getRefPayload(),
       });
 
       const nextInteriors = editablePack.interiorPrompts.map((p, idx) =>
@@ -579,6 +692,83 @@ export function ProductBuilderView({
       await onUpdateProduct(product.id, { promptPack: nextPack });
     });
 
+  const handleGenerateAllPagesFromPhoto = async () => {
+    if (!product || !editablePack) return;
+    setError('');
+    setRunningKey('photo-pages');
+    try {
+      const saved = (await handleSavePromptEdits()) ?? editablePack;
+      const workingPack = {
+        ...saved,
+        interiorPrompts: saved.interiorPrompts.map((p) => ({ ...p })),
+      };
+      const parsedPages = parseManuscriptIntoPageTexts(product.manuscriptNotes, 24);
+      const refPayload = getRefPayload();
+
+      const tasks: Array<{ label: string; run: () => Promise<void> }> = [];
+      if (workingPack.coverPrompt.trim()) {
+        tasks.push({
+          label: 'Front Cover Illustration',
+          run: async () => {
+            await onGenerateIllustration({
+              productId: product.id,
+              prompt: workingPack.coverPrompt.trim(),
+              stylePreset: artStylePreset,
+              provider,
+              kind: 'cover',
+              ...refPayload,
+            });
+          },
+        });
+      }
+
+      workingPack.interiorPrompts.forEach((page, idx) => {
+        if (page.prompt.trim()) {
+          tasks.push({
+            label: page.title || `Scene ${idx + 1}`,
+            run: async () => {
+              const asset = await onGenerateIllustration({
+                productId: product.id,
+                prompt: page.prompt.trim(),
+                stylePreset: artStylePreset,
+                provider,
+                kind: 'illustration',
+                sceneIndex: idx,
+                totalScenes: workingPack.interiorPrompts.length,
+                storyText: parsedPages[idx] || undefined,
+                ...refPayload,
+              });
+              workingPack.interiorPrompts[idx] = {
+                ...workingPack.interiorPrompts[idx],
+                generatedAssetId: asset.id,
+              };
+              setEditablePack({ ...workingPack });
+              await onUpdateProduct(product.id, { promptPack: workingPack });
+            },
+          });
+        }
+      });
+
+      for (let i = 0; i < tasks.length; i++) {
+        setBatchStatus(
+          `Generating distinct page ${i + 1} of ${tasks.length} from your photo: ${tasks[i].label}…`
+        );
+        await tasks[i].run();
+      }
+      setBatchStatus(null);
+      setStep(3);
+    } catch (err) {
+      setBatchStatus(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Stopped during multi-page photo generation. You can retry any remaining page below.'
+      );
+    } finally {
+      setRunningKey(null);
+    }
+  };
+
   const handleBuildAllSections = async () => {
     if (!product || !editablePack) return;
     setError('');
@@ -586,6 +776,7 @@ export function ProductBuilderView({
     try {
       const saved = (await handleSavePromptEdits()) ?? editablePack;
       let workingPack = { ...saved, interiorPrompts: saved.interiorPrompts.map((p) => ({ ...p })) };
+      const refPayload = getRefPayload();
 
       const tasks: Array<{ label: string; run: () => Promise<void> }> = [];
       if (workingPack.manuscriptPrompt.trim()) {
@@ -624,7 +815,7 @@ export function ProductBuilderView({
               stylePreset: artStylePreset,
               provider,
               kind: 'cover',
-              referenceAssetId: savedReferenceAsset?.id,
+              ...refPayload,
             });
           },
         });
@@ -641,7 +832,9 @@ export function ProductBuilderView({
                 stylePreset: artStylePreset,
                 provider,
                 kind: 'illustration',
-                referenceAssetId: savedReferenceAsset?.id,
+                sceneIndex: idx,
+                totalScenes: workingPack.interiorPrompts.length,
+                ...refPayload,
               });
               workingPack.interiorPrompts[idx] = {
                 ...workingPack.interiorPrompts[idx],
@@ -683,6 +876,81 @@ export function ProductBuilderView({
     }
   };
 
+  const handleAutoFillPagesFromManuscript = async () => {
+    if (!product) return;
+    const interiorAssets = productAssets.filter((a) => a.kind !== 'cover');
+    if (interiorAssets.length === 0) {
+      setError('Add or generate interior illustration pages first before placing story text.');
+      return;
+    }
+    const parsed = parseManuscriptIntoPageTexts(notesDraft, interiorAssets.length);
+    if (parsed.length === 0) {
+      setError(
+        'No read-aloud story paragraphs found in your manuscript box yet. Generate Story Copy in Step 2 or type your story paragraphs (e.g. "Page 1: ...") on the right.'
+      );
+      return;
+    }
+
+    setError('');
+    setAutoFillingPages(true);
+    try {
+      if (notesDirty) {
+        await onUpdateProduct(product.id, { manuscriptNotes: notesDraft });
+        setNotesDirty(false);
+      }
+      for (let i = 0; i < interiorAssets.length; i++) {
+        const text = parsed[i];
+        if (!text) continue;
+        const target = interiorAssets[i];
+        await onUpdateAsset(target.id, { storyText: text });
+        setPageDrafts((prev) => ({
+          ...prev,
+          [target.id]: {
+            storyText: text,
+            textPlacement: prev[target.id]?.textPlacement ?? target.textPlacement ?? '',
+          },
+        }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not auto-fill story text onto pages.');
+    } finally {
+      setAutoFillingPages(false);
+    }
+  };
+
+  const handleSavePageDesign = async (asset: StorageAsset) => {
+    const draft = pageDrafts[asset.id];
+    if (!draft) return;
+    setSavingAssetId(asset.id);
+    setError('');
+    try {
+      await onUpdateAsset(asset.id, {
+        storyText: draft.storyText,
+        textPlacement: draft.textPlacement,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save page text.');
+    } finally {
+      setSavingAssetId(null);
+    }
+  };
+
+  const handleMovePage = async (index: number, direction: -1 | 1) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= productAssets.length) return;
+    const current = productAssets[index];
+    const swapWith = productAssets[targetIdx];
+    const currentOrder = current.pageOrder;
+    const swapOrder = swapWith.pageOrder === currentOrder ? currentOrder + direction : swapWith.pageOrder;
+    setError('');
+    try {
+      await onUpdateAsset(current.id, { pageOrder: swapOrder });
+      await onUpdateAsset(swapWith.id, { pageOrder: currentOrder });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reorder pages.');
+    }
+  };
+
   const handleBuildPdf = async () => {
     if (!product) return;
     setError('');
@@ -702,7 +970,9 @@ export function ProductBuilderView({
         trimSize: exportTrim,
         includeBleed: exportBleed,
         includeTitlePage,
-        includeCaptions,
+        includeCaptions: pageLayout !== 'none',
+        pageLayout,
+        includeCoverTitle,
         rasterOverrides,
       });
       setLatestArtifact(artifact);
@@ -1164,57 +1434,146 @@ export function ProductBuilderView({
             </div>
           )}
 
-          {/* Shared Art Style & Reference Photo Bar */}
-          <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex flex-1 flex-wrap items-center gap-2.5">
-              <label
-                htmlFor="step2-art-style"
-                className="text-xs font-medium text-slate-700 whitespace-nowrap"
-              >
-                Art Style:
-              </label>
-              <select
-                id="step2-art-style"
-                value={artStylePreset}
-                onChange={(e) => {
-                  setArtStylePreset(e.target.value);
-                  updatePackField('artStylePreset', e.target.value);
-                }}
-                className="max-w-full flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 sm:max-w-md"
-              >
-                {STYLE_PRESET_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Shared Art Style, Image Gallery Picker & 1-Photo Multi-Page Generator */}
+          <div className="space-y-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-1 flex-wrap items-center gap-2.5">
+                <label
+                  htmlFor="step2-art-style"
+                  className="text-xs font-medium text-slate-700 whitespace-nowrap"
+                >
+                  Art Style:
+                </label>
+                <select
+                  id="step2-art-style"
+                  value={artStylePreset}
+                  onChange={(e) => {
+                    setArtStylePreset(e.target.value);
+                    updatePackField('artStylePreset', e.target.value);
+                  }}
+                  className="max-w-full flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 sm:max-w-md"
+                >
+                  {STYLE_PRESET_OPTIONS.map((opt) => (
+                    <option key={opt.label} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              {savedReferenceAsset ? (
-                <>
-                  <span className="font-medium text-emerald-700">
-                    Reference photo attached ({savedReferenceAsset.name})
-                  </span>
-                </>
-              ) : (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => refPhotoInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                 >
-                  <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                  Attach Reference Photo (Optional)
+                  <Upload className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                  Upload Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenGallery}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                >
+                  <Images className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                  Image Gallery ({galleryImages.length})
+                </button>
+                <input
+                  ref={refPhotoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
+            {/* Active Reference Photo + Gallery Strip + 1-Photo Multi-Page Action */}
+            <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                {selectedGalleryImage || savedReferenceAsset ? (
+                  <>
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded border border-blue-200 bg-slate-50">
+                      <AssetPreviewImage
+                        src={selectedGalleryImage?.url ?? savedReferenceAsset?.url}
+                        alt={selectedGalleryImage?.label ?? savedReferenceAsset?.name ?? 'Reference'}
+                        fallbackLabel="Photo"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-slate-900">
+                        Character Reference:{' '}
+                        {selectedGalleryImage?.label ?? savedReferenceAsset?.name}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        AI keeps this character&apos;s likeness while creating a brand-new pose, setting &amp; camera angle on every page.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Pick a photo from your Image Gallery or upload one photo to generate an entire multi-page illustrated book featuring that character.
+                  </p>
+                )}
+              </div>
+
+              {hasActiveRefPhoto && (
+                <button
+                  type="button"
+                  disabled={Boolean(runningKey)}
+                  onClick={handleGenerateAllPagesFromPhoto}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-55 whitespace-nowrap shrink-0"
+                >
+                  {runningKey === 'photo-pages' ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Generating Book Pages…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                      Generate All {editablePack.interiorPrompts.length + 1} Pages From Photo
+                    </>
+                  )}
                 </button>
               )}
-              <input
-                ref={refPhotoInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
             </div>
+
+            {galleryImages.length > 0 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+                <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                  Gallery:
+                </span>
+                {galleryImages.slice(0, 10).map((img) => {
+                  const active = selectedGalleryImageId === img.id;
+                  return (
+                    <button
+                      key={img.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedGalleryImageId(active ? null : img.id)
+                      }
+                      className={`flex shrink-0 items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-medium transition-colors ${
+                        active
+                          ? 'border-blue-700 bg-blue-50 text-blue-900'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="h-5 w-5 shrink-0 overflow-hidden rounded-xs bg-slate-100">
+                        <AssetPreviewImage
+                          src={img.url}
+                          alt={img.label}
+                          fallbackLabel=""
+                          className="h-full w-full object-cover"
+                        />
+                      </span>
+                      <span className="max-w-[110px] truncate">{img.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="divide-y divide-slate-200">
@@ -1579,24 +1938,24 @@ export function ProductBuilderView({
         </section>
       )}
 
-      {/* STEP 3: PAGES & COPY REVIEW */}
+      {/* STEP 3: ILLUSTRATED BOOK PAGE DESIGNER & COPY */}
       {step === 3 && product && (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-          {/* Artwork & Pages Gallery */}
+          {/* Illustrated Book Page Designer */}
           <section className="rounded-lg border border-slate-200 bg-white xl:col-span-7">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-              <div>
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-900">
-                  Step 3: Cover &amp; Interior Pages{' '}
+                  Step 3: Illustrated Book Page Designer{' '}
                   <span className="ml-1 font-mono text-xs font-normal text-slate-500 tabular-nums">
                     ({productAssets.length})
                   </span>
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  All generated and uploaded artwork ready to compile into your finished PDF.
+                  Preview and edit exact story text and placement on every page before compiling your KDP PDF.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <input
                   ref={pageUploadInputRef}
                   type="file"
@@ -1606,28 +1965,64 @@ export function ProductBuilderView({
                 />
                 <button
                   type="button"
+                  disabled={autoFillingPages || productAssets.length === 0}
+                  onClick={handleAutoFillPagesFromManuscript}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50 whitespace-nowrap"
+                >
+                  {autoFillingPages ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  Auto-Fill Story Text
+                </button>
+                <button
+                  type="button"
                   onClick={() => pageUploadInputRef.current?.click()}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
                 >
                   <Upload className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
                   Upload Page
                 </button>
+              </div>
+            </div>
+
+            {/* Book-wide Default Text Layout Bar */}
+            {productAssets.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-2.5 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label htmlFor="step3-default-layout" className="font-medium text-slate-700">
+                    Book Text Placement:
+                  </label>
+                  <select
+                    id="step3-default-layout"
+                    value={pageLayout}
+                    onChange={(e) => setPageLayout(e.target.value as PageTextLayout)}
+                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 focus:border-blue-700 focus:outline-none"
+                  >
+                    {PAGE_LAYOUT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100 whitespace-nowrap"
+                  className="inline-flex items-center gap-1 font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
                 >
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                   Generate More Pages
                 </button>
               </div>
-            </div>
+            )}
 
             {productAssets.length === 0 ? (
               <div className="px-6 py-14 text-center">
                 <p className="text-sm font-medium text-slate-900">No artwork pages generated yet</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Go back to Step 2 to generate your cover and interior pages from your prompts, or upload artwork files directly.
+                  Go back to Step 2 to generate your cover and interior pages from your prompts or photo, or upload artwork files directly.
                 </p>
                 <button
                   type="button"
@@ -1639,64 +2034,253 @@ export function ProductBuilderView({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-                {productAssets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="overflow-hidden rounded-md border border-slate-200 bg-white"
-                  >
-                    <div className="h-44 w-full bg-slate-50">
-                      <AssetPreviewImage
-                        src={asset.url}
-                        alt={asset.caption || asset.name}
-                        fallbackLabel={asset.name}
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-2.5 text-xs">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-slate-900">
-                          {asset.kind === 'cover' ? 'Front Cover' : `Page ${asset.pageOrder}`} ·{' '}
-                          {asset.name}
+              <div className="divide-y divide-slate-200">
+                {productAssets.map((asset, idx) => {
+                  const draft = pageDrafts[asset.id] ?? {
+                    storyText: asset.storyText ?? '',
+                    textPlacement: asset.textPlacement ?? '',
+                  };
+                  const effectiveLayout: PageTextLayout = draft.textPlacement || pageLayout;
+                  const isDirty =
+                    draft.storyText !== (asset.storyText ?? '') ||
+                    draft.textPlacement !== (asset.textPlacement ?? '');
+                  const previewText = draft.storyText.trim();
+
+                  return (
+                    <div key={asset.id} className="p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono font-semibold text-slate-500 tabular-nums">
+                            {asset.kind === 'cover' ? 'COVER' : `PAGE ${idx + 1}`}
+                          </span>
+                          <span className="truncate font-medium text-slate-900">
+                            {asset.name}
+                          </span>
                         </div>
-                        <div className="font-mono text-[11px] text-slate-500 tabular-nums">
-                          {formatBytes(asset.sizeBytes)}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            aria-label={`Move ${asset.name} up`}
+                            onClick={() => handleMovePage(idx, -1)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === productAssets.length - 1}
+                            aria-label={`Move ${asset.name} down`}
+                            onClick={() => handleMovePage(idx, 1)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <a
+                            href={asset.url}
+                            download={asset.name}
+                            aria-label={`Download ${asset.name}`}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                          >
+                            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          </a>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${asset.name}`}
+                            onClick={() => onDeleteAsset(asset.id)}
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <a
-                          href={asset.url}
-                          download={asset.name}
-                          aria-label={`Download ${asset.name}`}
-                          className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                        >
-                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                        </a>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${asset.name}`}
-                          onClick={() => onDeleteAsset(asset.id)}
-                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
+                        {/* Live Miniature Illustrated Book Page Preview */}
+                        <div className="sm:col-span-5">
+                          {asset.kind === 'cover' ? (
+                            <div className="relative aspect-square w-full overflow-hidden rounded border border-slate-300 bg-[#FAF6EE]">
+                              <AssetPreviewImage
+                                src={asset.url}
+                                alt={product.title}
+                                fallbackLabel="Cover"
+                                className="h-full w-full object-cover"
+                              />
+                              {includeCoverTitle && (
+                                <div className="absolute inset-x-3 top-3 rounded border border-amber-200/80 bg-[#FDFBF5]/92 px-2.5 py-2 text-center shadow-xs">
+                                  <div className="font-serif text-xs font-bold leading-tight text-slate-900">
+                                    {product.title}
+                                  </div>
+                                  {product.subtitle && (
+                                    <div className="mt-0.5 truncate font-serif text-[10px] italic text-slate-600">
+                                      {product.subtitle}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : effectiveLayout === 'facing-page' ? (
+                            <div className="grid aspect-[16/10] w-full grid-cols-2 overflow-hidden rounded border border-slate-300 bg-[#FDFBF6]">
+                              <div className="flex items-center justify-center border-r border-slate-200 p-2.5 text-center">
+                                <p className="line-clamp-5 font-serif text-[10px] leading-relaxed text-slate-800">
+                                  {previewText || 'Story text appears on this left facing page…'}
+                                </p>
+                              </div>
+                              <div className="h-full w-full overflow-hidden bg-slate-100">
+                                <AssetPreviewImage
+                                  src={asset.url}
+                                  alt={asset.name}
+                                  fallbackLabel="Art"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          ) : effectiveLayout === 'below-image' ? (
+                            <div className="flex aspect-square w-full flex-col overflow-hidden rounded border border-slate-300 bg-[#FDFBF6]">
+                              <div className="h-[68%] w-full overflow-hidden bg-slate-100">
+                                <AssetPreviewImage
+                                  src={asset.url}
+                                  alt={asset.name}
+                                  fallbackLabel="Art"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                              <div className="flex flex-1 items-center justify-center border-t border-amber-100 px-2.5 py-1.5 text-center">
+                                <p className="line-clamp-3 font-serif text-[10px] leading-snug text-slate-800">
+                                  {previewText || 'Add story text to typeset cleanly below artwork…'}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative aspect-square w-full overflow-hidden rounded border border-slate-300 bg-slate-100">
+                              <AssetPreviewImage
+                                src={asset.url}
+                                alt={asset.name}
+                                fallbackLabel="Art"
+                                className="h-full w-full object-cover"
+                              />
+                              {effectiveLayout !== 'none' && previewText && (
+                                <div
+                                  className={`absolute inset-x-2.5 rounded border border-amber-200/80 bg-[#FDFBF5]/92 px-2.5 py-1.5 text-center shadow-xs ${
+                                    effectiveLayout === 'overlay-top' ? 'top-2.5' : 'bottom-2.5'
+                                  }`}
+                                >
+                                  <p className="line-clamp-3 font-serif text-[10px] leading-snug text-slate-900">
+                                    {previewText}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Story Text & Placement Controls */}
+                        <div className="flex flex-col justify-between gap-2.5 sm:col-span-7">
+                          {asset.kind === 'cover' ? (
+                            <div className="space-y-2 text-xs text-slate-600">
+                              <p className="leading-relaxed">
+                                Front cover artwork renders full-bleed with your book title and subtitle banner cleanly typeset at the top.
+                              </p>
+                              <label className="flex items-center gap-2 font-medium text-slate-800">
+                                <input
+                                  type="checkbox"
+                                  checked={includeCoverTitle}
+                                  onChange={(e) => setIncludeCoverTitle(e.target.checked)}
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-700"
+                                />
+                                Show title &amp; subtitle banner on cover
+                              </label>
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                <label
+                                  htmlFor={`story-text-${asset.id}`}
+                                  className="block text-[11px] font-medium text-slate-700"
+                                >
+                                  Story Text Printed on This Page
+                                </label>
+                                <textarea
+                                  id={`story-text-${asset.id}`}
+                                  rows={3}
+                                  value={draft.storyText}
+                                  onChange={(e) =>
+                                    setPageDrafts((prev) => ({
+                                      ...prev,
+                                      [asset.id]: {
+                                        ...draft,
+                                        storyText: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder="Type the 1–3 read-aloud sentences that belong on this illustrated book page…"
+                                  className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-2 text-xs leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <select
+                                  aria-label={`Text placement for page ${idx + 1}`}
+                                  value={draft.textPlacement}
+                                  onChange={(e) =>
+                                    setPageDrafts((prev) => ({
+                                      ...prev,
+                                      [asset.id]: {
+                                        ...draft,
+                                        textPlacement: e.target.value as PageTextLayout | '',
+                                      },
+                                    }))
+                                  }
+                                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-blue-700 focus:outline-none"
+                                >
+                                  <option value="">
+                                    Use Book Default ({PAGE_LAYOUT_OPTIONS.find((o) => o.value === pageLayout)?.short})
+                                  </option>
+                                  {PAGE_LAYOUT_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.short}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <button
+                                  type="button"
+                                  disabled={!isDirty || savingAssetId === asset.id}
+                                  onClick={() => handleSavePageDesign(asset)}
+                                  className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                                    isDirty
+                                      ? 'bg-blue-700 text-white hover:bg-blue-800'
+                                      : 'border border-slate-200 bg-slate-50 text-slate-400'
+                                  }`}
+                                >
+                                  <Save className="h-3 w-3" aria-hidden="true" />
+                                  {savingAssetId === asset.id
+                                    ? 'Saving…'
+                                    : isDirty
+                                      ? 'Save Page Text'
+                                      : 'Saved'}
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
 
           {/* Manuscript & Listing Copy Editor */}
           <section className="flex flex-col rounded-lg border border-slate-200 bg-white xl:col-span-5">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-900">
-                  Manuscript &amp; Listing Copy
+                  Full Story Manuscript &amp; Copy
                 </h3>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Review and polish story text, blurb, and keywords before exporting.
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                  Write or edit your manuscript here, then click <span className="font-medium text-slate-700">Auto-Fill Story Text</span> to place each spread onto its matching page.
                 </p>
               </div>
               <button
@@ -1706,7 +2290,7 @@ export function ProductBuilderView({
                   setCopiedNotes(true);
                   setTimeout(() => setCopiedNotes(false), 1600);
                 }}
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 whitespace-nowrap"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 whitespace-nowrap"
               >
                 <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                 {copiedNotes ? 'Copied' : 'Copy'}
@@ -1715,14 +2299,14 @@ export function ProductBuilderView({
 
             <div className="flex flex-1 flex-col p-5">
               <textarea
-                rows={12}
+                rows={14}
                 aria-label="Product manuscript and listing copy"
                 value={notesDraft}
                 onChange={(e) => {
                   setNotesDraft(e.target.value);
                   setNotesDirty(true);
                 }}
-                placeholder="Your generated story manuscript, front matter, and KDP listing copy appear here…"
+                placeholder="Write or paste your story spreads here (e.g., Page 1: Zebo wagged his tail at the garden gate...)"
                 className="flex-1 rounded-md border border-slate-300 bg-slate-50/60 p-3 text-xs leading-relaxed text-slate-800 focus:border-blue-700 focus:bg-white focus:outline-none"
               />
 
@@ -1797,6 +2381,27 @@ export function ProductBuilderView({
                 </div>
               </div>
 
+              <div>
+                <label htmlFor="builder-export-layout" className="block text-xs font-medium text-slate-700">
+                  Illustrated Book Text Placement
+                </label>
+                <select
+                  id="builder-export-layout"
+                  value={pageLayout}
+                  onChange={(e) => setPageLayout(e.target.value as PageTextLayout)}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-blue-700 focus:outline-none"
+                >
+                  {PAGE_LAYOUT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Typesets each page&apos;s story text from Step 3 (or auto-splits your manuscript) with clean storybook margins and typography.
+                </p>
+              </div>
+
               <div className="flex flex-wrap gap-5 text-xs text-slate-700">
                 <label className="flex items-center gap-2">
                   <input
@@ -1819,11 +2424,11 @@ export function ProductBuilderView({
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={includeCaptions}
-                    onChange={(e) => setIncludeCaptions(e.target.checked)}
+                    checked={includeCoverTitle}
+                    onChange={(e) => setIncludeCoverTitle(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-700"
                   />
-                  Typeset Page Captions
+                  Show Title on Cover
                 </label>
               </div>
 
@@ -1833,7 +2438,9 @@ export function ProductBuilderView({
                     Pages Included ({selectedAssetIds.length} / {productAssets.length})
                   </span>
                   <span className="font-mono text-slate-500 tabular-nums">
-                    Total PDF pages: {selectedAssetIds.length + (includeTitlePage ? 1 : 0)}
+                    {pageLayout === 'facing-page'
+                      ? 'Facing spreads enabled'
+                      : `Total PDF pages: ${selectedAssetIds.length + (includeTitlePage ? 1 : 0)}`}
                   </span>
                 </div>
 
@@ -1870,10 +2477,13 @@ export function ProductBuilderView({
                             />
                           </div>
                           <div className="min-w-0 flex-1 text-xs">
-                            <div className="truncate font-medium text-slate-900">{asset.name}</div>
-                            <div className="text-[11px] text-slate-500">
-                              {asset.kind === 'cover' ? 'Cover' : `Page ${asset.pageOrder}`} ·{' '}
-                              {formatBytes(asset.sizeBytes)}
+                            <div className="truncate font-medium text-slate-900">
+                              {asset.kind === 'cover' ? 'Cover' : `Page ${asset.pageOrder}`} · {asset.name}
+                            </div>
+                            <div className="truncate text-[11px] text-slate-500">
+                              {asset.storyText
+                                ? `"${asset.storyText}"`
+                                : `${formatBytes(asset.sizeBytes)}`}
                             </div>
                           </div>
                         </label>
