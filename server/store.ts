@@ -11,6 +11,7 @@ import type {
   Series,
   StorageAsset,
   StorageFolder,
+  TrendScanResult,
   WorkspaceSnapshot,
 } from '../src/types/workspace';
 import { sanitizeFolderSlug } from '../src/lib/workspaceLogic';
@@ -408,6 +409,7 @@ function buildSeedWorkspace(): PersistedWorkspace {
     jobs,
     exports: exportsList,
     tokens,
+    trendScans: [] as TrendScanResult[],
   };
 }
 
@@ -430,6 +432,9 @@ class WorkspaceStore {
           parsed.settings.appsScriptConfigured = isAppsScriptConfigured();
           if (parsed.settings.appsScriptLastSyncAt === undefined) {
             parsed.settings.appsScriptLastSyncAt = null;
+          }
+          if (!Array.isArray(parsed.trendScans)) {
+            parsed.trendScans = [];
           }
           return parsed;
         }

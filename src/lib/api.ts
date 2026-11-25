@@ -12,6 +12,12 @@ import type {
   ProductStatus,
   Series,
   StorageAsset,
+  TrendDeepDive,
+  TrendMarketplace,
+  TrendOpportunity,
+  TrendProductType,
+  TrendScanResult,
+  TrendTimeHorizon,
   WorkspaceSettings,
   WorkspaceSnapshot,
 } from '../types/workspace';
@@ -270,6 +276,53 @@ export const workspaceApi = {
       rowsWritten: Record<string, number>;
       spreadsheetUrl?: string;
     }>('/api/bridge/sync', { method: 'POST', body: JSON.stringify({}) }),
+
+  // Current Trends Research (Live Web Search)
+  runTrendsScan: (payload: {
+    marketplaces: TrendMarketplace[];
+    productTypes: TrendProductType[];
+    timeHorizon: TrendTimeHorizon;
+    customTopic: string;
+    provider: GenerationProvider;
+    openRouterModel?: string;
+  }) =>
+    requestJson<{
+      scan: TrendScanResult;
+      researched_at: string;
+      market_summary: string;
+      opportunities: TrendOpportunity[];
+    }>('/api/ai/trends', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'scan', ...payload }),
+    }),
+
+  runTrendDeepDive: (payload: {
+    scanId: string;
+    opportunityId: string;
+    opportunity: TrendOpportunity;
+    provider: GenerationProvider;
+    openRouterModel?: string;
+  }) =>
+    requestJson<{ deepDive: TrendDeepDive }>('/api/ai/trends', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'deep_dive', ...payload }),
+    }),
+
+  deleteTrendScan: (scanId: string) =>
+    requestJson<{ ok: boolean }>(`/api/ai/trends/${encodeURIComponent(scanId)}`, {
+      method: 'DELETE',
+    }),
+
+  createProjectFromTrend: (payload: {
+    scanId: string;
+    opportunityId: string;
+    opportunity: TrendOpportunity;
+    deepDive?: TrendDeepDive;
+  }) =>
+    requestJson<{ product: Product; plan: BatchPlan }>('/api/ai/trends/create-project', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 /**

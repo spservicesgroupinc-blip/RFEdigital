@@ -3,11 +3,17 @@ import assert from 'node:assert/strict';
 import {
   calculateKdpDimensionsPt,
   expandPlanToJobs,
+  extractJsonObjectFromText,
   filterProducts,
+  filterTrendOpportunities,
   formatBytes,
   generateAppsScriptBridge,
   getNextRunnableJob,
+  mapTrendOpportunityToProjectSeed,
+  normalizeKdpTrimSize,
+  normalizeTrendOpportunity,
   sanitizeFolderSlug,
+  sanitizeSourceUrl,
   transitionJobStatus,
   validateAppsScriptWebAppUrl,
   validateProductInput,
@@ -206,4 +212,107 @@ test('validateAppsScriptWebAppUrl allows only HTTPS script.google.com macro URLs
   assert.equal(validateAppsScriptWebAppUrl('https://169.254.169.254/latest/meta-data').valid, false);
   assert.equal(validateAppsScriptWebAppUrl('https://evil.example.com/macros/s/abc/exec').valid, false);
   assert.equal(validateAppsScriptWebAppUrl('https://script.google.com/home').valid, false);
+});
+
+test('sanitizeSourceUrl allows only http/https URLs and blocks XSS protocols', () => {
+  assert.equal(sanitizeSourceUrl('https://www.amazon.com/dp/B012345'), 'https://www.amazon.com/dp/B012345');
+  assert.equal(sanitizeSourceUrl('http://etsy.com/listing/123'), 'http://etsy.com/listing/123');
+  assert.equal(sanitizeSourceUrl('javascript:alert(1)'), null);
+  assert.equal(sanitizeSourceUrl('data:text/html,<script>alert(1)</script>'), null);
+  assert.equal(sanitizeSourceUrl('not-a-url'), null);
+});
+
+test('extractJsonObjectFromText parses fenced and prose-wrapped JSON payloads', () => {
+  const fenced = 'Here are your findings:\n```json\n{"market_summary":"Steady Q4 demand","opportunities":[]}\n```';
+  const parsed = extractJsonObjectFromText(fenced);
+  assert.equal(parsed.market_summary, 'Steady Q4 demand');
+  assert.ok(Array.isArray(parsed.opportunities));
+});
+
+test('normalizeTrendOpportunity enforces score bounds, estimate labeling, and safe fallback sources', () => {
+  const fallback = [{ title: 'Amazon Best Sellers', url: 'https://www.amazon.com/best-sellers-books' }];
+  const opp = normalizeTrendOpportunity(
+    {
+      title: 'Bold & Easy Cozy Bakery Coloring Book',
+      product_type: 'coloring-book',
+      marketplaces: ['Amazon KDP', 'Etsy'],
+      opportunity_score: 142,
+      demand_level: 'High',
+      competition_level: 'Low',
+      price_range_usd: '$7.99 - $12.99',
+      sales_evidence: {
+        observed_signals: ['Multiple top-500 KDP coloring listings with 300+ reviews'],
+        estimated_velocity: '200-400 units/mo for top listings',
+        confidence: 'High',
+      },
+      seasonality: 'Evergreen with Q4 gift spike',
+      buyer_pain_points: ['Paper bleed-through with alcohol markers'],
+      winning_angle: 'Include protective blotter page and bold 3pt outlines',
+      starter_blueprint: {
+        target_age_or_audience: 'Teens & Adults',
+        suggested_trim_size: '8.5 x 8.5 in',
+        suggested_page_count: 42,
+        art_style_direction: 'Thick black ink lines, uncluttered cozy bakery interiors',
+        hook_concept: '40 stress-free hygge pastry shop scenes designed for alcohol markers',
+        seed_keywords: ['bold and easy coloring', 'cozy bakery coloring book'],
+      },
+      sources: [{ title: 'Bad Link', url: 'javascript:void(0)' }],
+    },
+    fallback,
+    0
+  );
+
+  assert.ok(opp);
+  assert.equal(opp.opportunity_score, 100);
+  assert.match(opp.sales_evidence.estimated_velocity, /^Est\./);
+  assert.equal(opp.sources.length, 1);
+  assert.equal(opp.sources[0].url, 'https://www.amazon.com/best-sellers-books');
+});
+
+test('mapTrendOpportunityToProjectSeed converts a trend card into a pre-filled Studio product and batch plan', () => {
+  const opp = normalizeTrendOpportunity(
+    {
+      title: 'Montessori Emotion Flashcards for Toddlers',
+      product_type: 'flashcards',
+      marketplaces: ['Etsy', 'Teachers Pay Teachers'],
+      opportunity_score: 88,
+      demand_level: 'High',
+      competition_level: 'Low',
+      price_range_usd: '$5.99 - $9.99',
+      sales_evidence: {
+        observed_signals: ['Etsy Bestseller badge on minimalist watercolor emotion cards'],
+        estimated_velocity: 'Est. 120-250 digital downloads/mo',
+        confidence: 'Medium',
+      },
+      seasonality: 'Evergreen + Back-to-School peak',
+      buyer_pain_points: ['Cartoon faces feel overstimulating'],
+      winning_angle: 'Calm pastel watercolor portraits with calm-down prompts on card backs',
+      starter_blueprint: {
+        target_age_or_audience: 'Ages 2-5 & Preschool Teachers',
+        suggested_trim_size: '8.5x11',
+        suggested_page_count: 18,
+        art_style_direction: 'Gentle Montessori watercolor portraits on cream cards',
+        hook_concept: '36 printable calm-corner emotion flashcards with parent scripts',
+        seed_keywords: ['montessori emotion cards', 'calm down corner printable'],
+      },
+      sources: [{ title: 'Etsy Search', url: 'https://www.etsy.com/search?q=emotion+flashcards' }],
+    },
+    [],
+    0
+  )!;
+
+  const seed = mapTrendOpportunityToProjectSeed(opp);
+  assert.equal(seed.productDraft.category, 'journal');
+  assert.equal(seed.productDraft.trimSize, '8.5x11');
+  assert.equal(seed.productDraft.pageCount, 18);
+  assert.ok(seed.productDraft.manuscriptNotes.includes('36 printable calm-corner emotion flashcards'));
+  assert.equal(seed.planSteps.length, 4);
+  assert.equal(normalizeKdpTrimSize('8 x 10 printable', 'wall-art'), '8x10');
+
+  const filtered = filterTrendOpportunities([opp], {
+    productType: 'flashcards',
+    marketplace: 'Etsy',
+    sortBy: 'competition',
+  });
+  assert.equal(filtered.length, 1);
 });

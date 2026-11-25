@@ -34,6 +34,7 @@ const CAPABILITY_MAP = [
   { id: '05', name: 'Export', responsibility: 'pdf-lib KDP PDF assembly & PNG ZIP bundles', depends: 'Generation, Storage' },
   { id: '06', name: 'Planning', responsibility: 'Series outlines, templates, batch generation plans', depends: 'Library, Generation' },
   { id: '07', name: 'Jobs', responsibility: 'Background queue, status polling, Apps Script ticks', depends: 'Library, Generation, Storage' },
+  { id: '08', name: 'Trends', responsibility: 'Live web market research, competitive deep-dives, 1-click project launch', depends: 'Library, Planning' },
 ];
 
 export function IdentityView({

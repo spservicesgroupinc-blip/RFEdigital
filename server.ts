@@ -15,6 +15,10 @@ import {
   generateSeriesPlanSteps,
   generateStorybookIllustration,
 } from './server/aiGenerator';
+import {
+  runLiveTrendDeepDive,
+  runLiveTrendMarketScan,
+} from './server/trendsResearch';
 import { buildAssetBundleZip, buildKdpPdfBuffer } from './server/pdfExport';
 import {
   callAppsScriptHealth,
@@ -24,6 +28,7 @@ import {
 import {
   expandPlanToJobs,
   getNextRunnableJob,
+  mapTrendOpportunityToProjectSeed,
   sanitizeFolderSlug,
   transitionJobStatus,
   validateProductInput,
@@ -43,6 +48,11 @@ import type {
   ProductStatus,
   Series,
   StorageAsset,
+  TrendDeepDive,
+  TrendMarketplace,
+  TrendOpportunity,
+  TrendProductType,
+  TrendTimeHorizon,
 } from './src/types/workspace';
 
 const PORT = 3000;
@@ -667,6 +677,225 @@ async function startServer() {
         error: err instanceof Error ? err.message : 'Outline generation failed.',
       });
     }
+  });
+
+  // --- Module 8: Current Trends Research (Live Web Search + Deep Dive + 1-Click Project Seed) ---
+  app.post('/api/ai/trends', async (req, res) => {
+    // Allow up to 60 seconds for multi-query live web search
+    req.setTimeout(60_000);
+    res.setTimeout(60_000);
+
+    // Optional token protection when called externally with Bearer API token or X-Apps-Script
+    const hasAppsScriptHeader = Boolean(req.headers['x-apps-script']);
+    const authHeader = req.headers.authorization;
+    if (hasAppsScriptHeader || (authHeader && authHeader.startsWith('Bearer '))) {
+      const token = requireBearerToken(req);
+      if (!token || !workspaceStore.verifyApiToken(token)) {
+        return res.status(401).json({ error: 'Unauthorized: invalid or revoked Workspace API token.' });
+      }
+    }
+
+    const body = req.body as {
+      mode?: 'scan' | 'deep_dive';
+      marketplaces?: unknown;
+      productTypes?: unknown;
+      timeHorizon?: unknown;
+      customTopic?: unknown;
+      provider?: GenerationProvider;
+      openRouterModel?: string;
+      scanId?: string;
+      opportunityId?: string;
+      opportunity?: TrendOpportunity;
+    };
+
+    const mode = body.mode === 'deep_dive' ? 'deep_dive' : 'scan';
+    const provider: GenerationProvider =
+      body.provider === 'openrouter'
+        ? 'openrouter'
+        : body.provider === 'gemini'
+          ? 'gemini'
+          : process.env.OPENROUTER_API_KEY?.trim()
+            ? 'openrouter'
+            : 'gemini';
+
+    try {
+      if (mode === 'scan') {
+        const validMarketplaces: TrendMarketplace[] = [
+          'Amazon KDP',
+          'Etsy',
+          'Teachers Pay Teachers',
+          'Gumroad',
+        ];
+        const validProductTypes: TrendProductType[] = [
+          'childrens-book',
+          'coloring-book',
+          'wall-art',
+          'flashcards',
+          'ebook-planner',
+        ];
+
+        const marketplaces = Array.isArray(body.marketplaces)
+          ? body.marketplaces.filter((m): m is TrendMarketplace =>
+              validMarketplaces.includes(m as TrendMarketplace)
+            )
+          : [];
+        const productTypes = Array.isArray(body.productTypes)
+          ? body.productTypes.filter((t): t is TrendProductType =>
+              validProductTypes.includes(t as TrendProductType)
+            )
+          : [];
+
+        if (marketplaces.length === 0) {
+          return res.status(400).json({ error: 'Select at least one marketplace to research.' });
+        }
+        if (productTypes.length === 0) {
+          return res.status(400).json({ error: 'Select at least one product type to scan.' });
+        }
+
+        const timeHorizon: TrendTimeHorizon =
+          body.timeHorizon === 'upcoming_seasonal' ? 'upcoming_seasonal' : 'selling_now';
+        const customTopic =
+          typeof body.customTopic === 'string' ? body.customTopic.trim().slice(0, 160) : '';
+
+        const scan = await runLiveTrendMarketScan({
+          marketplaces,
+          productTypes,
+          timeHorizon,
+          customTopic,
+          provider,
+          openRouterModel: typeof body.openRouterModel === 'string' ? body.openRouterModel : undefined,
+        });
+
+        const raw = workspaceStore.getRaw();
+        raw.trendScans.unshift(scan);
+        if (raw.trendScans.length > 15) {
+          raw.trendScans = raw.trendScans.slice(0, 15);
+        }
+        workspaceStore.save();
+
+        return res.json({
+          scan,
+          researched_at: scan.researched_at,
+          market_summary: scan.market_summary,
+          opportunities: scan.opportunities,
+        });
+      }
+
+      // mode === 'deep_dive'
+      const raw = workspaceStore.getRaw();
+      let targetOpportunity = body.opportunity;
+      let storedOpportunity: TrendOpportunity | undefined;
+
+      if (body.scanId && body.opportunityId) {
+        const storedScan = raw.trendScans.find((s) => s.id === body.scanId);
+        storedOpportunity = storedScan?.opportunities.find((o) => o.id === body.opportunityId);
+        if (!targetOpportunity && storedOpportunity) {
+          targetOpportunity = storedOpportunity;
+        }
+      }
+
+      if (!targetOpportunity || !targetOpportunity.title) {
+        return res.status(400).json({ error: 'Select a valid trend opportunity to deep-dive.' });
+      }
+
+      const deepDive = await runLiveTrendDeepDive({
+        opportunity: targetOpportunity,
+        provider,
+        openRouterModel: typeof body.openRouterModel === 'string' ? body.openRouterModel : undefined,
+      });
+
+      if (storedOpportunity) {
+        storedOpportunity.deep_dive = deepDive;
+        workspaceStore.save();
+      }
+
+      return res.json({ deepDive });
+    } catch (err) {
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Live trends research request failed.',
+      });
+    }
+  });
+
+  app.delete('/api/ai/trends/:scanId', (req, res) => {
+    const raw = workspaceStore.getRaw();
+    const before = raw.trendScans.length;
+    raw.trendScans = raw.trendScans.filter((s) => s.id !== req.params.scanId);
+    if (raw.trendScans.length === before) {
+      return res.status(404).json({ error: 'Trend scan not found.' });
+    }
+    workspaceStore.save();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/ai/trends/create-project', (req, res) => {
+    const { opportunity, deepDive, scanId, opportunityId } = req.body as {
+      opportunity?: TrendOpportunity;
+      deepDive?: TrendDeepDive;
+      scanId?: string;
+      opportunityId?: string;
+    };
+
+    if (!opportunity || !opportunity.title || !opportunity.starter_blueprint) {
+      return res.status(400).json({ error: 'Provide a valid trend opportunity to convert.' });
+    }
+
+    const seed = mapTrendOpportunityToProjectSeed(opportunity, deepDive ?? opportunity.deep_dive);
+    const now = new Date().toISOString();
+
+    const product: Product = {
+      id: `prod-${crypto.randomUUID().slice(0, 8)}`,
+      seriesId: null,
+      title: seed.productDraft.title,
+      subtitle: seed.productDraft.subtitle,
+      category: seed.productDraft.category,
+      status: seed.productDraft.status,
+      trimSize: seed.productDraft.trimSize,
+      pageCount: seed.productDraft.pageCount,
+      includeBleed: seed.productDraft.includeBleed,
+      isbn: `979-8-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-0`,
+      coverAssetId: null,
+      driveFolderId: null,
+      sheetsRowSyncedAt: null,
+      manuscriptNotes: seed.productDraft.manuscriptNotes,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const raw = workspaceStore.getRaw();
+    raw.products.unshift(product);
+    const folder = workspaceStore.ensureProductFolder(product);
+
+    const plan: BatchPlan = {
+      id: `plan-${crypto.randomUUID().slice(0, 8)}`,
+      productId: product.id,
+      seriesId: null,
+      name: seed.planName,
+      templateId: 'trend-blueprint',
+      trimSize: product.trimSize,
+      steps: seed.planSteps.map((s, idx) => ({
+        id: `step-${crypto.randomUUID().slice(0, 8)}`,
+        order: idx + 1,
+        title: s.title,
+        stepType: s.stepType,
+        prompt: s.prompt,
+        queued: false,
+      })),
+      createdAt: now,
+      updatedAt: now,
+    };
+    raw.plans.unshift(plan);
+
+    if (scanId && opportunityId) {
+      const scan = raw.trendScans.find((s) => s.id === scanId);
+      const target = scan?.opportunities.find((o) => o.id === opportunityId);
+      if (target) {
+        target.created_project_id = product.id;
+      }
+    }
+
+    workspaceStore.save();
+    res.status(201).json({ product, folder, plan });
   });
 
   // --- Module 5: Planning (Batch Generation Plans) ---

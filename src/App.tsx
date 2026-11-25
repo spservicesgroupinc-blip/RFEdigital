@@ -10,6 +10,7 @@ import {
   Menu,
   Plus,
   Sparkles,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import type { ModuleId, WorkspaceSnapshot } from './types/workspace';
@@ -21,6 +22,7 @@ import {
   subscribeGoogleAuth,
 } from './lib/googleAuth';
 import { LibraryView } from './components/LibraryView';
+import { TrendsView } from './components/TrendsView';
 import { StorageView } from './components/StorageView';
 import { GenerationView } from './components/GenerationView';
 import { PlanningView } from './components/PlanningView';
@@ -35,6 +37,7 @@ const NAV_ITEMS: Array<{
   icon: typeof BookOpen;
 }> = [
   { id: 'library', label: 'Library', caption: 'Books & Series', icon: BookOpen },
+  { id: 'trends', label: 'Trends', caption: 'Market Research', icon: TrendingUp },
   { id: 'storage', label: 'Storage', caption: 'Product Folders', icon: FolderKanban },
   { id: 'generation', label: 'Generation', caption: 'AI Prompt Studio', icon: Sparkles },
   { id: 'planning', label: 'Planning', caption: 'Outlines & Batches', icon: CalendarRange },
@@ -43,8 +46,23 @@ const NAV_ITEMS: Array<{
   { id: 'identity', label: 'Identity', caption: 'Accounts & Tokens', icon: KeyRound },
 ];
 
+function getInitialModuleFromPath(): ModuleId {
+  const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  const validIds: ModuleId[] = [
+    'library',
+    'trends',
+    'storage',
+    'generation',
+    'planning',
+    'jobs',
+    'export',
+    'identity',
+  ];
+  return validIds.includes(seg as ModuleId) ? (seg as ModuleId) : 'library';
+}
+
 export default function App() {
-  const [activeModule, setActiveModule] = useState<ModuleId>('library');
+  const [activeModule, setActiveModule] = useState<ModuleId>(() => getInitialModuleFromPath());
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +112,20 @@ export default function App() {
   useEffect(() => {
     refreshWorkspace();
   }, [refreshWorkspace]);
+
+  // Keep clean SPA URL paths (/trends, /planning, /, etc.) in sync with module navigation
+  useEffect(() => {
+    const targetPath = activeModule === 'library' ? '/' : `/${activeModule}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.replaceState({}, '', targetPath);
+    }
+  }, [activeModule]);
+
+  useEffect(() => {
+    const onPopState = () => setActiveModule(getInitialModuleFromPath());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   useEffect(() => {
     return subscribeGoogleAuth(
@@ -471,6 +503,45 @@ export default function App() {
                     const { series } = await workspaceApi.createSeries(payload);
                     await refreshWorkspace();
                     showNotice(`Created series "${series.name}".`);
+                  }}
+                />
+              )}
+
+              {activeModule === 'trends' && (
+                <TrendsView
+                  scans={workspace.trendScans ?? []}
+                  settings={workspace.settings}
+                  onRunScan={async (payload) => {
+                    const { scan } = await workspaceApi.runTrendsScan(payload);
+                    await refreshWorkspace();
+                    showNotice(
+                      `Completed live market scan: found ${scan.opportunities.length} ranked niche opportunities.`
+                    );
+                    return scan;
+                  }}
+                  onRunDeepDive={async (payload) => {
+                    const { deepDive } = await workspaceApi.runTrendDeepDive(payload);
+                    await refreshWorkspace();
+                    showNotice(`Finished competitive deep-dive for "${payload.opportunity.title}".`);
+                    return deepDive;
+                  }}
+                  onDeleteScan={async (scanId) => {
+                    await workspaceApi.deleteTrendScan(scanId);
+                    await refreshWorkspace();
+                    showNotice('Removed saved research scan.');
+                  }}
+                  onCreateProjectFromTrend={async (payload) => {
+                    const { product, plan } = await workspaceApi.createProjectFromTrend(payload);
+                    await refreshWorkspace();
+                    setActiveProductId(product.id);
+                    setActiveModule('planning');
+                    showNotice(
+                      `Created Studio project "${product.title}" with ${plan.steps.length}-step starter batch plan.`
+                    );
+                  }}
+                  onOpenExistingProject={(productId) => {
+                    setActiveProductId(productId);
+                    setActiveModule('planning');
                   }}
                 />
               )}

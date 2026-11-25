@@ -5,8 +5,10 @@
     "connectedSpreadsheetId": "",
     "connectedSpreadsheetUrl": "",
     "connectedDriveRootId": "",
-    "openRouterConfigured": false,
-    "geminiConfigured": true
+    "openRouterConfigured": true,
+    "geminiConfigured": true,
+    "appsScriptConfigured": true,
+    "appsScriptLastSyncAt": null
   },
   "series": [
     {
@@ -27,6 +29,24 @@
     }
   ],
   "products": [
+    {
+      "id": "prod-479747f6",
+      "seriesId": null,
+      "title": "Christmas Coloring Pages for Kids",
+      "subtitle": "Ages 4-10 · Etsy ($2.99 - $5.99)",
+      "category": "coloring-book",
+      "status": "draft",
+      "trimSize": "8.5x11",
+      "pageCount": 20,
+      "includeBleed": false,
+      "isbn": "979-8-2791-4699-0",
+      "coverAssetId": null,
+      "driveFolderId": null,
+      "sheetsRowSyncedAt": null,
+      "manuscriptNotes": "[TREND RESEARCH BRIEF]\nNiche Opportunity: Christmas Coloring Pages for Kids\nTarget Marketplaces: Etsy, Teachers Pay Teachers ($2.99 - $5.99)\nAudience: Ages 4-10 · Seasonality: Seasonal (peak from late November to December)\n\nHook Concept:\nFun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!\n\nWinning Differentiation Angle:\nCreate a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.\n\nArt Style Direction:\nWhimsical and festive illustrations\n\nBuyer Pain Points to Solve:\n- Need for engaging holiday activities for children\n- Desire for affordable and printable entertainment options\n\nReview Complaints from Deep-Dive:\n- Pages are too simple or not engaging enough for older kids\n- Some designs are repetitive or lack variety\n- Quality of printouts can vary based on printer settings\n- Files are sometimes difficult to download or access\n\nSeed Keywords: Christmas coloring pages, holiday activities for kids, printable Christmas crafts, educational coloring sheets, festive coloring book, Christmas coloring activities, printable holiday coloring pages, kids Christmas crafts, Christmas coloring book for toddlers, easy Christmas coloring pages",
+      "createdAt": "2026-11-25T12:00:33.003Z",
+      "updatedAt": "2026-11-25T12:00:33.003Z"
+    },
     {
       "id": "prod-lantern-bear-1",
       "seriesId": "ser-lantern-bear",
@@ -132,6 +152,14 @@
       "path": "/FolioPress/woodland-maidenhair-botanical-print-set",
       "driveFolderId": null,
       "createdAt": "2026-11-09T13:10:00.000Z"
+    },
+    {
+      "id": "fld-26e8dee8",
+      "productId": "prod-479747f6",
+      "name": "christmas-coloring-pages-for-kids",
+      "path": "/FolioPress/christmas-coloring-pages-for-kids",
+      "driveFolderId": null,
+      "createdAt": "2026-11-25T12:00:33.003Z"
     }
   ],
   "assets": [
@@ -224,6 +252,50 @@
     }
   ],
   "plans": [
+    {
+      "id": "plan-46a0f244",
+      "productId": "prod-479747f6",
+      "seriesId": null,
+      "name": "Christmas Coloring Pages for Kids — Starter Batch",
+      "templateId": "trend-blueprint",
+      "trimSize": "8.5x11",
+      "steps": [
+        {
+          "id": "step-02bc9a30",
+          "order": 1,
+          "title": "Listing Copy, Outline & Keyword Pack",
+          "stepType": "manuscript",
+          "prompt": "Draft the core outline, marketplace listing description, and content structure for \"Christmas Coloring Pages for Kids\" targeting Ages 4-10. Hook: Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!. Winning angle: Create a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.. Incorporate keywords: Christmas coloring pages, holiday activities for kids, printable Christmas crafts, educational coloring sheets, festive coloring book, Christmas coloring activities, printable holiday coloring pages.",
+          "queued": false
+        },
+        {
+          "id": "step-5b80ed02",
+          "order": 2,
+          "title": "Cover / Hero Visual Concept",
+          "stepType": "illustration",
+          "prompt": "Create the hero cover artwork for \"Christmas Coloring Pages for Kids\" (coloring-book). Hook concept: Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!. Art direction: Whimsical and festive illustrations.",
+          "queued": false
+        },
+        {
+          "id": "step-d6765771",
+          "order": 3,
+          "title": "Signature Interior Plate / Spread 01",
+          "stepType": "illustration",
+          "prompt": "Create the flagship interior page or spread for \"Christmas Coloring Pages for Kids\" tailored for Ages 4-10. Art direction: Whimsical and festive illustrations. Ensure clean composition suitable for 8.5x11 printing.",
+          "queued": false
+        },
+        {
+          "id": "step-7b8e207b",
+          "order": 4,
+          "title": "Assemble 8.5x11\" Print-Ready PDF",
+          "stepType": "export",
+          "prompt": "Assemble ordered product assets into a 8.5x11 in print-ready PDF for Etsy & Teachers Pay Teachers.",
+          "queued": false
+        }
+      ],
+      "createdAt": "2026-11-25T12:00:33.003Z",
+      "updatedAt": "2026-11-25T12:00:33.003Z"
+    },
     {
       "id": "plan-lantern-book-2",
       "productId": "prod-cloud-atelier",
@@ -373,6 +445,392 @@
       "tokenHash": "4283a0a7c1122f4de63d49c22b3b1e12b80841bef2dcb8beaacdd01dd926d2ee",
       "createdAt": "2026-11-18T12:00:00.000Z",
       "lastUsedAt": "2026-11-24T15:00:00.000Z"
+    }
+  ],
+  "trendScans": [
+    {
+      "id": "scan-4fc42cd0",
+      "researched_at": "2026-11-25T12:00:07.467Z",
+      "provider": "openrouter",
+      "model": "openai/gpt-4o-mini",
+      "query": {
+        "marketplaces": [
+          "Amazon KDP",
+          "Etsy"
+        ],
+        "productTypes": [
+          "childrens-book",
+          "coloring-book",
+          "wall-art"
+        ],
+        "timeHorizon": "selling_now",
+        "customTopic": "",
+        "provider": "openrouter"
+      },
+      "market_summary": "As of late November 2026, there is a significant surge in demand for seasonal products, particularly Christmas-themed items, across various marketplaces. Notably, children's picture books and coloring pages are experiencing heightened interest, with specific niches like Christmas coloring pages and emotional learning resources gaining traction. Additionally, digital wall art related to current trends, such as moon phases and dopamine decor, is also seeing increased attention.",
+      "opportunities": [
+        {
+          "id": "opp-1-christmas-coloring-p",
+          "title": "Christmas Coloring Pages for Kids",
+          "product_type": "coloring-book",
+          "marketplaces": [
+            "Etsy",
+            "Teachers Pay Teachers"
+          ],
+          "opportunity_score": 90,
+          "demand_level": "High",
+          "competition_level": "Medium",
+          "price_range_usd": "$2.99 - $5.99",
+          "sales_evidence": {
+            "observed_signals": [
+              "Etsy listings for 'Christmas coloring pages' increased by 60.1% to 75,893",
+              "Top 100 results show 48 new listings in the last month"
+            ],
+            "estimated_velocity": "Est. 300-500 units/mo for top listings based on observed demand signals",
+            "confidence": "High"
+          },
+          "seasonality": "Seasonal (peak from late November to December)",
+          "buyer_pain_points": [
+            "Need for engaging holiday activities for children",
+            "Desire for affordable and printable entertainment options"
+          ],
+          "winning_angle": "Unique designs that incorporate educational elements, such as counting or color recognition",
+          "starter_blueprint": {
+            "target_age_or_audience": "Ages 4-10",
+            "suggested_trim_size": "8.5x11",
+            "suggested_page_count": 20,
+            "art_style_direction": "Whimsical and festive illustrations",
+            "hook_concept": "Fun and educational Christmas-themed coloring pages to keep kids engaged during the holidays!",
+            "seed_keywords": [
+              "Christmas coloring pages",
+              "holiday activities for kids",
+              "printable Christmas crafts",
+              "educational coloring sheets",
+              "festive coloring book"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Trending on Etsy Now: 90 Digital Niches Measured | Optimsy",
+              "url": "https://www.optimsy.com/en/blog/trending-on-etsy-digital-niches-november-2026"
+            }
+          ],
+          "created_project_id": "prod-479747f6",
+          "deep_dive": {
+            "researched_at": "2026-11-25T12:00:29.755Z",
+            "provider": "openrouter",
+            "model": "openai/gpt-4o-mini",
+            "summary": "The market for Christmas coloring pages for kids is vibrant, with a variety of listings on Etsy and Teachers Pay Teachers. Prices range from free to around $6.38, catering to parents and educators looking for festive activities for children aged 4-10. The competition includes both paid and free options, emphasizing the need for unique and engaging designs to stand out.",
+            "top_competing_listings": [
+              {
+                "title": "24 Christmas Coloring Pages for Kids, Printable Christmas Coloring Sheets, Santa Snowman Reindeer Elf, Holiday Activity PDF",
+                "marketplace": "Etsy",
+                "observed_price": "$2.99",
+                "observed_signal": "Instant download, 5-star reviews",
+                "url": "https://www.etsy.com/listing/4614930611/24-christmas-coloring-pages-for-kids"
+              },
+              {
+                "title": "25 Christmas Coloring Pages, Printable Kids Activities (PDF) - Etsy",
+                "marketplace": "Etsy",
+                "observed_price": "$1.93",
+                "observed_signal": "Star Seller, 5 out of 5 stars",
+                "url": "https://www.etsy.com/listing/1817001740/christmas-coloring-pages-christmas"
+              },
+              {
+                "title": "Christmas Coloring Pages, Christmas Coloring Sheets, Fun Winter Coloring Book activity",
+                "marketplace": "Etsy",
+                "observed_price": "$2.00",
+                "observed_signal": "100 pages, instant access",
+                "url": "https://www.etsy.com/listing/4607726020/christmas-coloring-pages-christmas"
+              },
+              {
+                "title": "Free Christmas Coloring Pages for Kids | Fun December Activities",
+                "marketplace": "Teachers Pay Teachers",
+                "observed_price": "FREE",
+                "observed_signal": "5 out of 5 stars, 2 reviews",
+                "url": "https://www.teacherspayteachers.com/Product/Free-Christmas-Coloring-Pages-for-Kids-Fun-December-Activities-14950118"
+              },
+              {
+                "title": "FREE Christmas Coloring Book for Kids | 18 Printable Holiday Coloring Pages",
+                "marketplace": "Teachers Pay Teachers",
+                "observed_price": "FREE",
+                "observed_signal": "5 out of 5 stars, 2 reviews",
+                "url": "https://www.teacherspayteachers.com/Product/FREE-Christmas-Coloring-Book-for-Kids-18-Printable-Holiday-Coloring-Pages-Wi-15019200"
+              }
+            ],
+            "price_ladder": {
+              "entry_tier": "$1.50 - $3.00 (basic printable pages)",
+              "mid_tier": "$4.00 - $6.00 (standard bundles)",
+              "premium_tier": "$6.99 - $9.99 (deluxe bundles or themed collections)",
+              "recommended_price": "$2.99 for a basic set / $4.99 for a larger bundle"
+            },
+            "recurring_buyer_complaints": [
+              "Pages are too simple or not engaging enough for older kids",
+              "Some designs are repetitive or lack variety",
+              "Quality of printouts can vary based on printer settings",
+              "Files are sometimes difficult to download or access"
+            ],
+            "high_intent_keywords": [
+              "Christmas coloring pages",
+              "holiday activities for kids",
+              "printable Christmas crafts",
+              "educational coloring sheets",
+              "festive coloring book",
+              "Christmas coloring activities",
+              "printable holiday coloring pages",
+              "kids Christmas crafts",
+              "Christmas coloring book for toddlers",
+              "easy Christmas coloring pages"
+            ],
+            "differentiation_angle": "Create a themed collection of interactive coloring pages that incorporate educational elements, such as simple math problems or fun facts about Christmas traditions, to engage both kids and parents. Additionally, offering a subscription model for new pages each week could attract recurring customers.",
+            "sources": [
+              {
+                "title": "24 Christmas Coloring Pages for Kids",
+                "url": "https://www.etsy.com/listing/4614930611/24-christmas-coloring-pages-for-kids"
+              },
+              {
+                "title": "25 Christmas Coloring Pages, Printable Kids Activities",
+                "url": "https://www.etsy.com/listing/1817001740/christmas-coloring-pages-christmas"
+              },
+              {
+                "title": "Free Christmas Coloring Pages for Kids",
+                "url": "https://www.teacherspayteachers.com/Product/Free-Christmas-Coloring-Pages-for-Kids-Fun-December-Activities-14950118"
+              }
+            ]
+          }
+        },
+        {
+          "id": "opp-2-moon-phase-printable",
+          "title": "Moon Phase Printable Wall Art",
+          "product_type": "wall-art",
+          "marketplaces": [
+            "Etsy"
+          ],
+          "opportunity_score": 88,
+          "demand_level": "High",
+          "competition_level": "Low",
+          "price_range_usd": "$8.00 - $15.00",
+          "sales_evidence": {
+            "observed_signals": [
+              "Moon phase prints saw a 33% increase in attention with 56 new listings in the top 100"
+            ],
+            "estimated_velocity": "Est. 150-300 units/mo for top listings based on observed demand signals",
+            "confidence": "High"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Desire for unique home decor that reflects personal interests",
+            "Need for affordable art that fits various aesthetics"
+          ],
+          "winning_angle": "Stylish designs that cater to astrology and nature lovers",
+          "starter_blueprint": {
+            "target_age_or_audience": "Young adults and home decorators",
+            "suggested_trim_size": "16x20",
+            "suggested_page_count": 1,
+            "art_style_direction": "Minimalist and modern",
+            "hook_concept": "Transform your space with beautiful moon phase art that resonates with your cosmic side!",
+            "seed_keywords": [
+              "moon phase print",
+              "astrology wall art",
+              "celestial decor",
+              "modern printable art",
+              "nature-inspired wall art"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Best Selling Wall Art on Etsy: 30 Styles Measured | Optimsy",
+              "url": "https://www.optimsy.com/en/blog/best-selling-wall-art-on-etsy"
+            }
+          ],
+          "created_project_id": null
+        },
+        {
+          "id": "opp-3-social-emotional-lea",
+          "title": "Social Emotional Learning (SEL) Resources for Teachers",
+          "product_type": "flashcards",
+          "marketplaces": [
+            "Teachers Pay Teachers"
+          ],
+          "opportunity_score": 85,
+          "demand_level": "High",
+          "competition_level": "Medium",
+          "price_range_usd": "$5.00 - $15.00",
+          "sales_evidence": {
+            "observed_signals": [
+              "TPT's trending resources include SEL materials for classroom culture and behavior support"
+            ],
+            "estimated_velocity": "Est. 200-400 units/mo for top listings based on observed demand signals",
+            "confidence": "High"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Need for effective tools to support student mental health",
+            "Desire for engaging and practical classroom resources"
+          ],
+          "winning_angle": "Interactive and visually appealing materials that facilitate emotional learning",
+          "starter_blueprint": {
+            "target_age_or_audience": "Grades K-5",
+            "suggested_trim_size": "8.5x11",
+            "suggested_page_count": 30,
+            "art_style_direction": "Bright and engaging illustrations",
+            "hook_concept": "Empower your students with fun and interactive SEL resources that promote emotional intelligence!",
+            "seed_keywords": [
+              "SEL resources",
+              "social emotional learning activities",
+              "classroom behavior tools",
+              "emotional intelligence flashcards",
+              "kindness activities"
+            ]
+          },
+          "sources": [
+            {
+              "title": "TPT Trends 2026: What Resource Types Are Selling Right Now",
+              "url": "https://www.spylore.com/blog/tpt-trends-2026-resource-types-selling"
+            }
+          ],
+          "created_project_id": null
+        },
+        {
+          "id": "opp-4-anxiety-relief-color",
+          "title": "Anxiety Relief Coloring Book for Kids",
+          "product_type": "coloring-book",
+          "marketplaces": [
+            "Amazon KDP",
+            "Teachers Pay Teachers"
+          ],
+          "opportunity_score": 84,
+          "demand_level": "Emerging",
+          "competition_level": "Low",
+          "price_range_usd": "$4.99 - $9.99",
+          "sales_evidence": {
+            "observed_signals": [
+              "Anxiety relief coloring books have a lower listing count with increasing interest"
+            ],
+            "estimated_velocity": "Est. 100-200 units/mo for top listings based on observed demand signals",
+            "confidence": "Medium"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Need for tools to help children manage anxiety",
+            "Desire for creative outlets that promote relaxation"
+          ],
+          "winning_angle": "Unique themes that incorporate mindfulness and relaxation techniques",
+          "starter_blueprint": {
+            "target_age_or_audience": "Ages 5-12",
+            "suggested_trim_size": "8.5x11",
+            "suggested_page_count": 30,
+            "art_style_direction": "Calming and soothing illustrations",
+            "hook_concept": "Help your child unwind with a fun and therapeutic coloring book designed for anxiety relief!",
+            "seed_keywords": [
+              "anxiety relief coloring book",
+              "mindfulness activities for kids",
+              "therapeutic coloring pages",
+              "stress relief for children",
+              "relaxation techniques for kids"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Digital Products to Sell in 2026: What Etsy Search Shows",
+              "url": "https://www.optimsy.com/en/blog/digital-products-to-sell"
+            }
+          ],
+          "created_project_id": null
+        },
+        {
+          "id": "opp-5-kawaii-coloring-page",
+          "title": "Kawaii Coloring Pages for Kids",
+          "product_type": "coloring-book",
+          "marketplaces": [
+            "Etsy"
+          ],
+          "opportunity_score": 82,
+          "demand_level": "Emerging",
+          "competition_level": "Medium",
+          "price_range_usd": "$3.00 - $6.00",
+          "sales_evidence": {
+            "observed_signals": [
+              "Kawaii coloring pages saw a 10.2% increase in listings with rising attention"
+            ],
+            "estimated_velocity": "Est. 150-250 units/mo for top listings based on observed demand signals",
+            "confidence": "Medium"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Desire for cute and engaging art for children",
+            "Need for affordable and printable entertainment options"
+          ],
+          "winning_angle": "Charming designs that appeal to children and parents alike",
+          "starter_blueprint": {
+            "target_age_or_audience": "Ages 4-10",
+            "suggested_trim_size": "8.5x11",
+            "suggested_page_count": 20,
+            "art_style_direction": "Cute and colorful illustrations",
+            "hook_concept": "Delight your little ones with adorable kawaii coloring pages that spark creativity and joy!",
+            "seed_keywords": [
+              "kawaii coloring pages",
+              "cute printable art",
+              "adorable coloring sheets",
+              "fun coloring activities",
+              "children's art projects"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Trending on Etsy Now: 90 Digital Niches Measured | Optimsy",
+              "url": "https://www.optimsy.com/en/blog/trending-on-etsy-digital-niches-november-2026"
+            }
+          ],
+          "created_project_id": null
+        },
+        {
+          "id": "opp-6-dopamine-decor-print",
+          "title": "Dopamine Decor Print",
+          "product_type": "wall-art",
+          "marketplaces": [
+            "Etsy"
+          ],
+          "opportunity_score": 80,
+          "demand_level": "Emerging",
+          "competition_level": "Low",
+          "price_range_usd": "$5.00 - $12.00",
+          "sales_evidence": {
+            "observed_signals": [
+              "Dopamine decor prints increased in attention with 13 new listings in the top 100"
+            ],
+            "estimated_velocity": "Est. 100-200 units/mo for top listings based on observed demand signals",
+            "confidence": "Medium"
+          },
+          "seasonality": "Evergreen",
+          "buyer_pain_points": [
+            "Desire for uplifting and motivational home decor",
+            "Need for affordable art that enhances mental well-being"
+          ],
+          "winning_angle": "Positive affirmations and vibrant designs that resonate with buyers",
+          "starter_blueprint": {
+            "target_age_or_audience": "Young adults and home decorators",
+            "suggested_trim_size": "8x10",
+            "suggested_page_count": 1,
+            "art_style_direction": "Bright and colorful typography",
+            "hook_concept": "Elevate your space with vibrant dopamine decor prints that inspire positivity and joy!",
+            "seed_keywords": [
+              "dopamine decor print",
+              "motivational wall art",
+              "positive affirmation poster",
+              "uplifting home decor",
+              "colorful printable art"
+            ]
+          },
+          "sources": [
+            {
+              "title": "Best Selling Wall Art on Etsy: 30 Styles Measured | Optimsy",
+              "url": "https://www.optimsy.com/en/blog/best-selling-wall-art-on-etsy"
+            }
+          ],
+          "created_project_id": null
+        }
+      ]
     }
   ]
 }

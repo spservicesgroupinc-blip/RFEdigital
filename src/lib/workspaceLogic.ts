@@ -7,6 +7,10 @@ import type {
   Product,
   ProductCategory,
   ProductStatus,
+  TrendDeepDive,
+  TrendOpportunity,
+  TrendProductType,
+  TrendSourceLink,
 } from '../types/workspace';
 
 export interface KdpPageDimensions {
@@ -367,4 +371,409 @@ export function generateAppsScriptBridge(spreadsheetId: string, workspaceUrl: st
 // Workspace Callback URL: ${safeUrl}
 // Run setupWorkspace() once in Apps Script, deploy as a Web App,
 // and save the Web App URL as APPS_SCRIPT_WEBAPP_URL in Settings > Secrets.`;
+}
+
+/**
+ * Strictly validates external citation URLs returned by live web search.
+ * Only http: and https: URLs are permitted (blocks javascript:, data:, vbscript:, etc.).
+ */
+export function sanitizeSourceUrl(rawUrl: string): string | null {
+  if (typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.length > 2048) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts and parses a JSON object from an LLM response that may include markdown code fences
+ * or brief prose before/after the JSON payload.
+ */
+export function extractJsonObjectFromText(rawText: string): Record<string, unknown> {
+  const trimmed = rawText.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1].trim() : trimmed;
+
+  try {
+    const direct = JSON.parse(candidate);
+    if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+      return direct as Record<string, unknown>;
+    }
+  } catch {
+    // Fall through to balanced-brace extraction
+  }
+
+  const startIdx = candidate.indexOf('{');
+  const endIdx = candidate.lastIndexOf('}');
+  if (startIdx !== -1 && endIdx > startIdx) {
+    const slice = candidate.slice(startIdx, endIdx + 1);
+    const parsed = JSON.parse(slice);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+
+  throw new Error('Could not parse structured JSON from live research response.');
+}
+
+function normalizeStringList(value: unknown, maxItems = 8, maxLen = 260): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((s) => s.length > 0)
+    .slice(0, maxItems)
+    .map((s) => s.slice(0, maxLen));
+}
+
+export function dedupeSanitizedSources(
+  rawSources: unknown,
+  fallbackSources: TrendSourceLink[] = []
+): TrendSourceLink[] {
+  const seen = new Set<string>();
+  const out: TrendSourceLink[] = [];
+
+  const pushSource = (title: string, url: string) => {
+    const safe = sanitizeSourceUrl(url);
+    if (!safe || seen.has(safe)) return;
+    seen.add(safe);
+    let label = title.trim().slice(0, 110);
+    if (!label) {
+      try {
+        label = new URL(safe).hostname.replace(/^www\./, '');
+      } catch {
+        label = 'Source';
+      }
+    }
+    out.push({ title: label, url: safe });
+  };
+
+  if (Array.isArray(rawSources)) {
+    for (const item of rawSources) {
+      if (item && typeof item === 'object') {
+        const rec = item as Record<string, unknown>;
+        pushSource(String(rec.title ?? ''), String(rec.url ?? ''));
+      } else if (typeof item === 'string') {
+        pushSource('', item);
+      }
+    }
+  }
+
+  if (out.length === 0) {
+    for (const fb of fallbackSources.slice(0, 3)) {
+      pushSource(fb.title, fb.url);
+    }
+  }
+
+  return out.slice(0, 8);
+}
+
+const VALID_TREND_TYPES = new Set<TrendProductType>([
+  'childrens-book',
+  'coloring-book',
+  'wall-art',
+  'flashcards',
+  'ebook-planner',
+]);
+
+export function normalizeTrendProductType(raw: unknown): TrendProductType {
+  const s = String(raw ?? '').toLowerCase().trim();
+  if (VALID_TREND_TYPES.has(s as TrendProductType)) {
+    return s as TrendProductType;
+  }
+  if (s.includes('color') || s.includes('activity')) return 'coloring-book';
+  if (s.includes('art') || s.includes('print') || s.includes('sticker')) return 'wall-art';
+  if (s.includes('flash') || s.includes('worksheet')) return 'flashcards';
+  if (s.includes('plan') || s.includes('ebook') || s.includes('guide') || s.includes('journal')) {
+    return 'ebook-planner';
+  }
+  return 'childrens-book';
+}
+
+export function normalizeTrendOpportunity(
+  raw: unknown,
+  fallbackSources: TrendSourceLink[],
+  index: number
+): TrendOpportunity | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const title = String(obj.title ?? '').trim().slice(0, 140);
+  if (!title) return null;
+
+  const rawScore = Number(obj.opportunity_score);
+  const opportunity_score = Number.isFinite(rawScore)
+    ? Math.min(100, Math.max(1, Math.round(rawScore)))
+    : 75;
+
+  const rawDemand = String(obj.demand_level ?? 'Medium').trim();
+  const demand_level: TrendOpportunity['demand_level'] =
+    rawDemand === 'High' || rawDemand === 'Emerging' ? rawDemand : 'Medium';
+
+  const rawComp = String(obj.competition_level ?? 'Medium').trim();
+  const competition_level: TrendOpportunity['competition_level'] =
+    rawComp === 'Low' || rawComp === 'High' ? rawComp : 'Medium';
+
+  const salesObj = (obj.sales_evidence && typeof obj.sales_evidence === 'object'
+    ? obj.sales_evidence
+    : {}) as Record<string, unknown>;
+
+  const observed_signals = normalizeStringList(salesObj.observed_signals, 6, 280);
+  let estimated_velocity = String(salesObj.estimated_velocity ?? '').trim().slice(0, 260);
+  if (!estimated_velocity) {
+    estimated_velocity = 'Est. velocity not quantified from available public signals.';
+  } else if (!/\b(est\.?|estimate|estimated)\b/i.test(estimated_velocity)) {
+    estimated_velocity = `Est. ${estimated_velocity}`;
+  }
+
+  const rawConf = String(salesObj.confidence ?? 'Medium').trim();
+  const confidence: 'High' | 'Medium' | 'Low' =
+    rawConf === 'High' || rawConf === 'Low' ? rawConf : 'Medium';
+
+  const bpObj = (obj.starter_blueprint && typeof obj.starter_blueprint === 'object'
+    ? obj.starter_blueprint
+    : {}) as Record<string, unknown>;
+
+  const product_type = normalizeTrendProductType(obj.product_type);
+  const rawPageCount = Number(bpObj.suggested_page_count);
+  const suggested_page_count =
+    Number.isFinite(rawPageCount) && rawPageCount >= 1 && rawPageCount <= 828
+      ? Math.round(rawPageCount)
+      : product_type === 'coloring-book'
+        ? 40
+        : product_type === 'childrens-book'
+          ? 24
+          : 16;
+
+  const marketplaces = normalizeStringList(obj.marketplaces, 4, 40);
+
+  return {
+    id: `opp-${index + 1}-${sanitizeFolderSlug(title).slice(0, 20)}`,
+    title,
+    product_type,
+    marketplaces: marketplaces.length > 0 ? marketplaces : ['Amazon KDP'],
+    opportunity_score,
+    demand_level,
+    competition_level,
+    price_range_usd: String(obj.price_range_usd ?? '$6.99 - $14.99').trim().slice(0, 60),
+    sales_evidence: {
+      observed_signals:
+        observed_signals.length > 0
+          ? observed_signals
+          : ['Live web search surfaced active category listings; verify exact BSR directly on marketplace.'],
+      estimated_velocity,
+      confidence,
+    },
+    seasonality: String(obj.seasonality ?? 'Evergreen').trim().slice(0, 100),
+    buyer_pain_points: normalizeStringList(obj.buyer_pain_points, 5, 240),
+    winning_angle: String(obj.winning_angle ?? '').trim().slice(0, 320),
+    starter_blueprint: {
+      target_age_or_audience: String(bpObj.target_age_or_audience ?? 'General Audience')
+        .trim()
+        .slice(0, 80),
+      suggested_trim_size: String(bpObj.suggested_trim_size ?? '8.5x8.5').trim().slice(0, 30),
+      suggested_page_count,
+      art_style_direction: String(bpObj.art_style_direction ?? 'Clean editorial illustration')
+        .trim()
+        .slice(0, 260),
+      hook_concept: String(bpObj.hook_concept ?? title).trim().slice(0, 320),
+      seed_keywords: normalizeStringList(bpObj.seed_keywords, 10, 60),
+    },
+    sources: dedupeSanitizedSources(obj.sources, fallbackSources),
+    created_project_id: null,
+  };
+}
+
+export function mapTrendProductTypeToCategory(productType: TrendProductType): ProductCategory {
+  switch (productType) {
+    case 'childrens-book':
+      return 'childrens-book';
+    case 'coloring-book':
+      return 'coloring-book';
+    case 'wall-art':
+      return 'art-print';
+    case 'flashcards':
+    case 'ebook-planner':
+    default:
+      return 'journal';
+  }
+}
+
+export function normalizeKdpTrimSize(
+  suggested: string,
+  productType: TrendProductType
+): KdpTrimSize {
+  const compact = suggested.toLowerCase().replace(/\s+/g, '').replace(/[×x]/g, 'x');
+  if (compact.includes('8.5x8.5') || compact.includes('8x8')) return '8.5x8.5';
+  if (compact.includes('8.5x11')) return '8.5x11';
+  if (compact.includes('8x10')) return '8x10';
+  if (compact.includes('6x9')) return '6x9';
+
+  switch (productType) {
+    case 'childrens-book':
+      return '8.5x8.5';
+    case 'coloring-book':
+    case 'flashcards':
+      return '8.5x11';
+    case 'wall-art':
+      return '8x10';
+    case 'ebook-planner':
+    default:
+      return '6x9';
+  }
+}
+
+export interface TrendProjectSeed {
+  productDraft: {
+    title: string;
+    subtitle: string;
+    category: ProductCategory;
+    status: ProductStatus;
+    trimSize: KdpTrimSize;
+    pageCount: number;
+    includeBleed: boolean;
+    manuscriptNotes: string;
+  };
+  planName: string;
+  planSteps: Array<{
+    title: string;
+    stepType: 'manuscript' | 'illustration' | 'export';
+    prompt: string;
+  }>;
+}
+
+/**
+ * Converts a researched trend opportunity (and optional deep-dive) into a pre-filled
+ * Studio Product draft and a ready-to-queue Batch Generation Plan.
+ */
+export function mapTrendOpportunityToProjectSeed(
+  opportunity: TrendOpportunity,
+  deepDive?: TrendDeepDive
+): TrendProjectSeed {
+  const category = mapTrendProductTypeToCategory(opportunity.product_type);
+  const trimSize = normalizeKdpTrimSize(
+    opportunity.starter_blueprint.suggested_trim_size,
+    opportunity.product_type
+  );
+  const pageCount = Math.min(
+    828,
+    Math.max(1, Math.round(opportunity.starter_blueprint.suggested_page_count || 24))
+  );
+  const includeBleed = opportunity.product_type === 'childrens-book';
+
+  const keywords = Array.from(
+    new Set([
+      ...opportunity.starter_blueprint.seed_keywords,
+      ...(deepDive?.high_intent_keywords ?? []),
+    ])
+  ).slice(0, 12);
+
+  const notesSections = [
+    `[TREND RESEARCH BRIEF]`,
+    `Niche Opportunity: ${opportunity.title}`,
+    `Target Marketplaces: ${opportunity.marketplaces.join(', ')} (${opportunity.price_range_usd})`,
+    `Audience: ${opportunity.starter_blueprint.target_age_or_audience} · Seasonality: ${opportunity.seasonality}`,
+    ``,
+    `Hook Concept:`,
+    opportunity.starter_blueprint.hook_concept,
+    ``,
+    `Winning Differentiation Angle:`,
+    deepDive?.differentiation_angle || opportunity.winning_angle,
+    ``,
+    `Art Style Direction:`,
+    opportunity.starter_blueprint.art_style_direction,
+    ``,
+    `Buyer Pain Points to Solve:`,
+    ...(opportunity.buyer_pain_points.length > 0
+      ? opportunity.buyer_pain_points.map((p) => `- ${p}`)
+      : ['- Deliver crisp print quality and clear, practical value.']),
+    ...(deepDive?.recurring_buyer_complaints?.length
+      ? ['', 'Review Complaints from Deep-Dive:', ...deepDive.recurring_buyer_complaints.map((c) => `- ${c}`)]
+      : []),
+    ``,
+    `Seed Keywords: ${keywords.join(', ')}`,
+  ];
+
+  const subtitle = `${opportunity.starter_blueprint.target_age_or_audience} · ${opportunity.marketplaces[0] ?? 'Amazon KDP'} (${opportunity.price_range_usd})`.slice(
+    0,
+    160
+  );
+
+  const planSteps: TrendProjectSeed['planSteps'] = [
+    {
+      title: 'Listing Copy, Outline & Keyword Pack',
+      stepType: 'manuscript',
+      prompt: `Draft the core outline, marketplace listing description, and content structure for "${opportunity.title}" targeting ${opportunity.starter_blueprint.target_age_or_audience}. Hook: ${opportunity.starter_blueprint.hook_concept}. Winning angle: ${deepDive?.differentiation_angle || opportunity.winning_angle}. Incorporate keywords: ${keywords.slice(0, 7).join(', ')}.`,
+    },
+    {
+      title: 'Cover / Hero Visual Concept',
+      stepType: 'illustration',
+      prompt: `Create the hero cover artwork for "${opportunity.title}" (${opportunity.product_type}). Hook concept: ${opportunity.starter_blueprint.hook_concept}. Art direction: ${opportunity.starter_blueprint.art_style_direction}.`,
+    },
+    {
+      title: 'Signature Interior Plate / Spread 01',
+      stepType: 'illustration',
+      prompt: `Create the flagship interior page or spread for "${opportunity.title}" tailored for ${opportunity.starter_blueprint.target_age_or_audience}. Art direction: ${opportunity.starter_blueprint.art_style_direction}. Ensure clean composition suitable for ${trimSize} printing.`,
+    },
+    {
+      title: `Assemble ${trimSize}" Print-Ready PDF`,
+      stepType: 'export',
+      prompt: `Assemble ordered product assets into a ${trimSize} in ${includeBleed ? 'full-bleed ' : ''}print-ready PDF for ${opportunity.marketplaces.join(' & ')}.`,
+    },
+  ];
+
+  return {
+    productDraft: {
+      title: opportunity.title.slice(0, 120),
+      subtitle,
+      category,
+      status: 'draft',
+      trimSize,
+      pageCount,
+      includeBleed,
+      manuscriptNotes: notesSections.join('\n').slice(0, 10000),
+    },
+    planName: `${opportunity.title.slice(0, 62)} — Starter Batch`,
+    planSteps,
+  };
+}
+
+export function filterTrendOpportunities(
+  opportunities: TrendOpportunity[],
+  filters: {
+    productType: TrendProductType | 'all';
+    marketplace: string | 'all';
+    sortBy: 'score' | 'competition';
+  }
+): TrendOpportunity[] {
+  const compRank: Record<TrendOpportunity['competition_level'], number> = {
+    Low: 0,
+    Medium: 1,
+    High: 2,
+  };
+
+  return opportunities
+    .filter((opp) => {
+      if (filters.productType !== 'all' && opp.product_type !== filters.productType) return false;
+      if (
+        filters.marketplace !== 'all' &&
+        !opp.marketplaces.some((m) => m.toLowerCase().includes(filters.marketplace.toLowerCase()))
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .slice()
+    .sort((a, b) => {
+      if (filters.sortBy === 'competition') {
+        const diff = compRank[a.competition_level] - compRank[b.competition_level];
+        if (diff !== 0) return diff;
+      }
+      return b.opportunity_score - a.opportunity_score;
+    });
 }
