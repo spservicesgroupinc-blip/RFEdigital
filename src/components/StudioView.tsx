@@ -129,6 +129,10 @@ interface StudioViewProps {
     productId: string;
     assetIds: string[];
   }) => Promise<ExportArtifact>;
+  onGenerateProduct: (payload: {
+    productId: string;
+    provider?: GenerationProvider;
+  }) => Promise<ExportArtifact>;
   onUploadArtifactToDrive: (artifactId: string) => Promise<void>;
   onOpenInPromptStudio: (req: Omit<PromptPrefillRequest, 'nonce'>) => void;
   onOpenGallery: () => void;
@@ -164,6 +168,7 @@ export function StudioView({
   onDeleteAsset,
   onExportPdf,
   onExportBundle,
+  onGenerateProduct,
   onUploadArtifactToDrive,
   onOpenInPromptStudio,
   onOpenGallery,
@@ -254,6 +259,7 @@ export function StudioView({
   const [buildingPdf, setBuildingPdf] = useState(false);
   const [buildingZip, setBuildingZip] = useState(false);
   const [latestArtifact, setLatestArtifact] = useState<ExportArtifact | null>(null);
+  const [generateBookStage, setGenerateBookStage] = useState<string | null>(null);
   const [driveUploadingId, setDriveUploadingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<{
@@ -795,6 +801,29 @@ export function StudioView({
       );
     } finally {
       setRunningKey(null);
+    }
+  };
+
+  const handleGenerateBook = async () => {
+    if (!product) return;
+    setError('');
+    const stages = ['Writing story…', 'Generating cover…', 'Generating pages…', 'Assembling PDF…'];
+    setGenerateBookStage(stages[0]);
+    let stageIndex = 0;
+    const timer = setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, stages.length - 1);
+      setGenerateBookStage(stages[stageIndex]);
+    }, 8000);
+    try {
+      const artifact = await onGenerateProduct({ productId: product.id, provider });
+      clearInterval(timer);
+      setGenerateBookStage(null);
+      setLatestArtifact(artifact);
+      setStep(3);
+    } catch (err) {
+      clearInterval(timer);
+      setGenerateBookStage(null);
+      setError(err instanceof Error ? err.message : 'Generate Book failed — you can retry.');
     }
   };
 
@@ -1383,6 +1412,8 @@ export function StudioView({
           handleSavePromptEdits={handleSavePromptEdits}
           handleRegeneratePrompts={handleRegeneratePrompts}
           handleBuildAllSections={handleBuildAllSections}
+          handleGenerateBook={handleGenerateBook}
+          generateBookStage={generateBookStage}
           handleGenerateCover={handleGenerateCover}
           handleGenerateStory={handleGenerateStory}
           handleGenerateListing={handleGenerateListing}

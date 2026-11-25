@@ -86,6 +86,8 @@ interface StudioGeneratePanelProps {
   handleSavePromptEdits: () => Promise<ProductPromptPack | null>;
   handleRegeneratePrompts: () => Promise<void>;
   handleBuildAllSections: () => Promise<void>;
+  handleGenerateBook: () => Promise<void>;
+  generateBookStage: string | null;
   handleGenerateCover: () => void;
   handleGenerateStory: () => void;
   handleGenerateListing: () => void;
@@ -154,6 +156,8 @@ export function StudioGeneratePanel({
   handleSavePromptEdits,
   handleRegeneratePrompts,
   handleBuildAllSections,
+  handleGenerateBook,
+  generateBookStage,
   handleGenerateCover,
   handleGenerateStory,
   handleGenerateListing,
@@ -231,14 +235,14 @@ export function StudioGeneratePanel({
 
               <button
                 type="button"
-                disabled={Boolean(runningKey)}
-                onClick={handleBuildAllSections}
+                disabled={Boolean(runningKey) || Boolean(generateBookStage)}
+                onClick={handleGenerateBook}
                 className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap shrink-0"
               >
-                {runningKey === 'all' ? (
+                {generateBookStage ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    Building…
+                    {generateBookStage}
                   </>
                 ) : (
                   <>

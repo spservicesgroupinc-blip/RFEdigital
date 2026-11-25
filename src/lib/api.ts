@@ -198,6 +198,16 @@ export const workspaceApi = {
       }
     ),
 
+  generateProduct: (payload: {
+    productId: string;
+    provider?: GenerationProvider;
+    openRouterModel?: string;
+  }) =>
+    requestJson<{ artifact: ExportArtifact; product: Product }>('/api/generate/product', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   generateOutline: (payload: {
     productId?: string;
     productTitle?: string;

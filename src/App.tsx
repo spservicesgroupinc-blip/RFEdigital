@@ -882,6 +882,12 @@ export default function App() {
                     showNotice(`Packaged PNG bundle "${artifact.fileName}".`);
                     return artifact;
                   }}
+                  onGenerateProduct={async (payload) => {
+                    const { artifact } = await workspaceApi.generateProduct(payload);
+                    await refreshWorkspace();
+                    showNotice(`Generated full book — KDP PDF ready (${artifact.pageCount} pages).`);
+                    return artifact;
+                  }}
                   onUploadArtifactToDrive={(artifactId) =>
                     handleUploadToDrive({ artifactId })
                   }

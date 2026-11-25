@@ -367,6 +367,92 @@ function readAssetAsDataUrl(asset: StorageAsset | undefined): string | undefined
   }
 }
 
+interface GeneratedIllustrationResult {
+  buffer: Buffer;
+  mimeType: string;
+  extension: string;
+  caption: string;
+  model: string;
+}
+
+/** Persist a generated illustration as a StorageAsset and append a generation record.
+ *  Shared by the single-illustration and full-book generation endpoints. */
+function persistIllustrationAsset(
+  raw: ReturnType<typeof workspaceStore.getRaw>,
+  product: Product,
+  generated: GeneratedIllustrationResult,
+  opts: {
+    prompt: string;
+    provider: GenerationProvider;
+    isCover: boolean;
+    storyText?: string;
+    textPlacement?: PageTextLayout;
+    replaceAssetId?: string;
+  }
+): StorageAsset {
+  const folder = workspaceStore.ensureProductFolder(product);
+  const fileName = `${sanitizeFolderSlug(product.title).slice(0, 28)}-${crypto
+    .randomUUID()
+    .slice(0, 6)}${generated.extension}`;
+  const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
+  fs.writeFileSync(targetPath, generated.buffer);
+
+  const existingTarget =
+    typeof opts.replaceAssetId === 'string' && opts.replaceAssetId.trim()
+      ? raw.assets.find((a) => a.id === opts.replaceAssetId!.trim() && a.productId === product.id)
+      : undefined;
+
+  let asset: StorageAsset;
+  if (existingTarget) {
+    existingTarget.name = fileName;
+    existingTarget.mimeType = generated.mimeType;
+    existingTarget.sizeBytes = generated.buffer.byteLength;
+    existingTarget.url = `/api/storage/files/${fileName}`;
+    existingTarget.caption = generated.caption;
+    if (opts.storyText) existingTarget.storyText = opts.storyText;
+    if (isValidPageTextLayout(opts.textPlacement)) existingTarget.textPlacement = opts.textPlacement;
+    existingTarget.driveFileId = null;
+    existingTarget.driveWebLink = null;
+    asset = existingTarget;
+  } else {
+    const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
+    asset = {
+      id: `asset-${crypto.randomUUID().slice(0, 8)}`,
+      folderId: folder.id,
+      productId: product.id,
+      name: fileName,
+      kind: opts.isCover ? 'cover' : 'illustration',
+      mimeType: generated.mimeType,
+      sizeBytes: generated.buffer.byteLength,
+      url: `/api/storage/files/${fileName}`,
+      caption: generated.caption,
+      storyText: opts.storyText || undefined,
+      textPlacement: isValidPageTextLayout(opts.textPlacement) ? opts.textPlacement : undefined,
+      pageOrder: existingCount + 1,
+      driveFileId: null,
+      driveWebLink: null,
+      createdAt: new Date().toISOString(),
+    };
+    raw.assets.push(asset);
+    if (asset.kind === 'cover' || !product.coverAssetId) {
+      product.coverAssetId = asset.id;
+    }
+  }
+
+  raw.generations.unshift({
+    id: `gen-${crypto.randomUUID().slice(0, 8)}`,
+    productId: product.id,
+    mode: 'illustration' as const,
+    provider: opts.provider,
+    model: generated.model,
+    prompt: opts.prompt.trim(),
+    assetId: asset.id,
+    createdAt: new Date().toISOString(),
+  });
+
+  return asset;
+}
+
 function requireBearerToken(req: express.Request): string | null {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) return null;
@@ -1394,73 +1480,187 @@ export function createApiApp(): express.Express {
         visualNote: resolvedVisualNote || undefined,
       });
 
-      const folder = workspaceStore.ensureProductFolder(product);
-      const fileName = `${sanitizeFolderSlug(product.title).slice(0, 28)}-${crypto
-        .randomUUID()
-        .slice(0, 6)}${generated.extension}`;
-      const targetPath = resolveSafeChildPath(UPLOADS_DIR, fileName);
-      fs.writeFileSync(targetPath, generated.buffer);
-
-      // If replaceAssetId is provided (e.g. "Match Art to Text" in Step 3), update that page cleanly in place!
-      const existingTarget =
-        typeof replaceAssetId === 'string' && replaceAssetId.trim()
-          ? raw.assets.find((a) => a.id === replaceAssetId.trim() && a.productId === product.id)
-          : undefined;
-
-      let asset: StorageAsset;
-      if (existingTarget) {
-        existingTarget.name = fileName;
-        existingTarget.mimeType = generated.mimeType;
-        existingTarget.sizeBytes = generated.buffer.byteLength;
-        existingTarget.url = `/api/storage/files/${fileName}`;
-        existingTarget.caption = generated.caption;
-        if (resolvedStoryText) existingTarget.storyText = resolvedStoryText;
-        if (isValidPageTextLayout(textPlacement)) existingTarget.textPlacement = textPlacement;
-        existingTarget.driveFileId = null;
-        existingTarget.driveWebLink = null;
-        asset = existingTarget;
-      } else {
-        const existingCount = raw.assets.filter((a) => a.productId === product.id).length;
-        asset = {
-          id: `asset-${crypto.randomUUID().slice(0, 8)}`,
-          folderId: folder.id,
-          productId: product.id,
-          name: fileName,
-          kind: isCover ? 'cover' : 'illustration',
-          mimeType: generated.mimeType,
-          sizeBytes: generated.buffer.byteLength,
-          url: `/api/storage/files/${fileName}`,
-          caption: generated.caption,
-          storyText: resolvedStoryText || undefined,
-          textPlacement: isValidPageTextLayout(textPlacement) ? textPlacement : undefined,
-          pageOrder: existingCount + 1,
-          driveFileId: null,
-          driveWebLink: null,
-          createdAt: new Date().toISOString(),
-        };
-        raw.assets.push(asset);
-        if (asset.kind === 'cover' || !product.coverAssetId) {
-          product.coverAssetId = asset.id;
-        }
-      }
-
-      const record = {
-        id: `gen-${crypto.randomUUID().slice(0, 8)}`,
-        productId: product.id,
-        mode: 'illustration' as const,
+      const asset = persistIllustrationAsset(raw, product, generated, {
+        prompt,
         provider: chosenProvider,
-        model: generated.model,
-        prompt: prompt.trim(),
-        assetId: asset.id,
-        createdAt: new Date().toISOString(),
-      };
-      raw.generations.unshift(record);
+        isCover,
+        storyText: resolvedStoryText || undefined,
+        textPlacement,
+        replaceAssetId,
+      });
       workspaceStore.save();
 
+      const record = raw.generations[0];
       res.json({ record, asset, product });
     } catch (err) {
       res.status(502).json({
         error: err instanceof Error ? err.message : 'Illustration generation failed.',
+      });
+    }
+  });
+
+  // One-click "Generate Book": manuscript -> synced interior prompts -> cover ->
+  // each interior illustration -> assembled KDP PDF. Partial results are saved
+  // after every step so a mid-run failure leaves a recoverable product.
+  app.post('/api/generate/product', async (req, res) => {
+    req.setTimeout(5 * 60_000);
+    res.setTimeout(5 * 60_000);
+
+    const { productId, provider, openRouterModel } = req.body as {
+      productId?: string;
+      provider?: GenerationProvider;
+      openRouterModel?: string;
+    };
+
+    const raw = workspaceStore.getRaw();
+    const product = raw.products.find((p) => p.id === productId);
+    if (!product) return res.status(400).json({ error: 'Select a valid product.' });
+
+    const chosenProvider: GenerationProvider =
+      provider === 'openrouter'
+        ? 'openrouter'
+        : provider === 'gemini'
+          ? 'gemini'
+          : process.env.OPENROUTER_API_KEY?.trim()
+            ? 'openrouter'
+            : 'gemini';
+
+    const stylePreset =
+      product.promptPack?.artStylePreset?.trim() ||
+      '3D Animated Storybook Cartoon — charming expressive character, rich lighting, polished children’s book art';
+
+    try {
+      // 1) Manuscript + auto-sync interior prompts to the story
+      if (product.promptPack?.manuscriptPrompt) {
+        const textResult = await generatePublishingText({
+          prompt: product.promptPack.manuscriptPrompt.trim(),
+          mode: 'manuscript',
+          provider: chosenProvider,
+          productTitle: product.title,
+          category: product.category,
+          openRouterModel: typeof openRouterModel === 'string' ? openRouterModel.trim() : undefined,
+        });
+
+        const existing = (product.manuscriptNotes ?? '').trim();
+        if (existing.startsWith('[TREND RESEARCH BRIEF]')) {
+          const splitIdx = existing.search(/\n---\s/);
+          const briefOnly = splitIdx > 0 ? existing.slice(0, splitIdx).trim() : existing;
+          product.manuscriptNotes = `${briefOnly}\n\n---\n\n${textResult.text}`;
+        } else {
+          product.manuscriptNotes = textResult.text;
+        }
+
+        const syncedInteriors = syncInteriorPromptsFromManuscript({
+          manuscriptNotes: product.manuscriptNotes,
+          productTitle: product.title,
+          artStylePreset: product.promptPack.artStylePreset,
+          existingPrompts: product.promptPack.interiorPrompts,
+          maxPages: 12,
+        });
+        if (syncedInteriors.length > 0) {
+          product.promptPack = {
+            ...product.promptPack,
+            interiorPrompts: syncedInteriors,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        product.updatedAt = new Date().toISOString();
+        workspaceStore.save();
+      }
+
+      const manuscriptSpreads = parseManuscriptIntoSpreads(product.manuscriptNotes, 24);
+
+      // 2) Cover
+      if (product.promptPack?.coverPrompt) {
+        const cover = await generateStorybookIllustration({
+          prompt: product.promptPack.coverPrompt.trim(),
+          stylePreset,
+          provider: chosenProvider,
+          productTitle: product.title,
+          openRouterModel: typeof openRouterModel === 'string' ? openRouterModel.trim() : undefined,
+          isCover: true,
+        });
+        persistIllustrationAsset(raw, product, cover, {
+          prompt: product.promptPack.coverPrompt,
+          provider: chosenProvider,
+          isCover: true,
+        });
+        workspaceStore.save();
+      }
+
+      // 3) Interior illustrations, matched to the synced prompts + story spreads
+      const interiorPrompts = product.promptPack?.interiorPrompts ?? [];
+      const sceneCount = Math.max(interiorPrompts.length, 4);
+      for (let i = 0; i < interiorPrompts.length; i++) {
+        const prompt = interiorPrompts[i].prompt?.trim() || interiorPrompts[i].title.trim();
+        if (!prompt) continue;
+        const spread = manuscriptSpreads[i];
+        const illustration = await generateStorybookIllustration({
+          prompt,
+          stylePreset,
+          provider: chosenProvider,
+          productTitle: product.title,
+          openRouterModel: typeof openRouterModel === 'string' ? openRouterModel.trim() : undefined,
+          sceneIndex: i,
+          totalScenes: sceneCount,
+          isCover: false,
+          storyText: spread?.storyText || undefined,
+          visualNote: spread?.visualNote || undefined,
+        });
+        persistIllustrationAsset(raw, product, illustration, {
+          prompt,
+          provider: chosenProvider,
+          isCover: false,
+          storyText: spread?.storyText || undefined,
+        });
+        workspaceStore.save();
+      }
+
+      // 4) Assemble and save the KDP PDF
+      const orderedAssets = raw.assets
+        .filter((a) => a.productId === product.id && a.kind !== 'reference')
+        .sort((a, b) => a.pageOrder - b.pageOrder);
+
+      const { pdfBytes, pageCount } = await buildKdpPdfBuffer({
+        product,
+        assets: orderedAssets,
+        trimSize: product.trimSize,
+        includeBleed: Boolean(product.includeBleed),
+        includeTitlePage: true,
+        includeCaptions: true,
+        includeCoverTitle: true,
+        authorImprint: raw.settings.authorImprint,
+      });
+
+      const fileName = `${sanitizeFolderSlug(product.title)}-${product.trimSize}-${crypto
+        .randomUUID()
+        .slice(0, 6)}.pdf`;
+      const outPath = resolveSafeChildPath(EXPORTS_DIR, fileName);
+      fs.writeFileSync(outPath, Buffer.from(pdfBytes));
+
+      const artifact: ExportArtifact = {
+        id: `exp-${crypto.randomUUID().slice(0, 8)}`,
+        productId: product.id,
+        format: 'pdf',
+        fileName,
+        trimSize: product.trimSize,
+        includeBleed: Boolean(product.includeBleed),
+        pageCount,
+        sizeBytes: pdfBytes.byteLength,
+        downloadUrl: `/api/export/download/${fileName}`,
+        driveFileId: null,
+        driveWebLink: null,
+        createdAt: new Date().toISOString(),
+      };
+      raw.exports.unshift(artifact);
+      product.updatedAt = new Date().toISOString();
+      workspaceStore.save();
+
+      res.status(201).json({ artifact, product });
+    } catch (err) {
+      workspaceStore.save();
+      res.status(502).json({
+        error: err instanceof Error ? err.message : 'Full book generation failed.',
       });
     }
   });
