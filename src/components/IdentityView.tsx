@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Code2, Copy, Download, ExternalLink, KeyRound, LogOut, RefreshCw, Trash2 } from 'lucide-react';
+import { Code2, ChevronDown, Copy, Download, ExternalLink, KeyRound, LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type { ApiTokenRecord, WorkspaceSettings } from '../types/workspace';
 import { validateTokenName } from '../lib/workspaceLogic';
@@ -63,6 +63,7 @@ export function IdentityView({
   const [spreadsheetId, setSpreadsheetId] = useState(settings.connectedSpreadsheetId);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [confirmBootstrap, setConfirmBootstrap] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
@@ -161,7 +162,7 @@ export function IdentityView({
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Google Workspace Account & Sheets/Drive Connection */}
-        <section className="rounded-lg border border-slate-200 bg-white p-6 xl:col-span-6">
+        <section className="rounded-lg border border-slate-200 bg-white p-6 xl:col-span-12">
           <h2 className="text-base font-semibold text-slate-900">Google Workspace Account</h2>
           <p className="mt-0.5 text-xs text-slate-500">
             Connect Google Drive and Google Sheets to sync your product catalog and upload exported PDFs.
@@ -266,9 +267,25 @@ export function IdentityView({
             </div>
           </form>
         </section>
+      </div>
 
+      {/* Advanced: scoped API tokens + Apps Script bridge */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+        Advanced (API tokens &amp; Apps Script bridge)
+      </button>
+
+      {showAdvanced && (
+        <>
         {/* Scoped Personal API Tokens */}
-        <section className="rounded-lg border border-slate-200 bg-white p-6 xl:col-span-6">
+        <section className="rounded-lg border border-slate-200 bg-white p-6">
           <h2 className="text-base font-semibold text-slate-900">Workspace API Tokens</h2>
           <p className="mt-0.5 text-xs text-slate-500">
             Generate SHA-256 hashed tokens for Google Apps Script triggers and external batch runners.
@@ -375,7 +392,6 @@ export function IdentityView({
             )}
           </div>
         </section>
-      </div>
 
       {/* Google Apps Script Web App Bridge (code.gs + Settings > Secrets) */}
       <section className="rounded-lg border border-slate-200 bg-white p-6">
@@ -451,6 +467,8 @@ export function IdentityView({
           </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* Capability Map Architecture Reference Table */}
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
