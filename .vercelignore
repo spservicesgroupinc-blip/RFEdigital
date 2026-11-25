@@ -1,0 +1,8 @@
+.data/
+.playwright-cli/
+.aistudio/
+dev-dist/
+tasks/
+RFEdigital.code-workspace
+**/*.test.ts
+*.log

@@ -1,7 +1,11 @@
 node_modules/
 build/
 dist/
+dev-dist/
 coverage/
+.vercel
+.data/
+.playwright-cli/
 .DS_Store
 *.log
 .env*

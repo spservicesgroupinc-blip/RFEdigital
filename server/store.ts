@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type {
   ApiTokenRecord,
@@ -17,8 +18,17 @@ import type {
 import { sanitizeFolderSlug } from '../src/lib/workspaceLogic';
 import { isAppsScriptConfigured } from './appsScriptBridge';
 
+export const IS_SERVERLESS = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+);
+
 const ROOT_DIR = process.cwd();
-export const DATA_DIR = path.resolve(ROOT_DIR, '.data');
+const CONFIGURED_DATA_DIR = process.env.WORKSPACE_DATA_DIR?.trim();
+export const DATA_DIR = CONFIGURED_DATA_DIR
+  ? path.resolve(CONFIGURED_DATA_DIR)
+  : IS_SERVERLESS
+    ? path.resolve(os.tmpdir(), 'foliopress-data')
+    : path.resolve(ROOT_DIR, '.data');
 export const UPLOADS_DIR = path.resolve(DATA_DIR, 'uploads');
 export const EXPORTS_DIR = path.resolve(DATA_DIR, 'exports');
 const DB_FILE = path.resolve(DATA_DIR, 'workspace.json');

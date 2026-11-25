@@ -1,8 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateAppsScriptWebAppUrl } from '../src/lib/workspaceLogic';
 
-const CODE_GS_PATH = path.resolve(process.cwd(), 'code.gs');
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CODE_GS_CANDIDATES = [
+  path.resolve(process.cwd(), 'code.gs'),
+  path.resolve(MODULE_DIR, '..', 'code.gs'),
+];
 
 export function isAppsScriptConfigured(): boolean {
   const raw = process.env.APPS_SCRIPT_WEBAPP_URL?.trim() ?? '';
@@ -22,10 +27,12 @@ export function getValidatedAppsScriptUrl(): string {
 }
 
 export function readCodeGsSource(): string {
-  if (!fs.existsSync(CODE_GS_PATH)) {
-    throw new Error('code.gs file not found in project root.');
+  for (const candidate of CODE_GS_CANDIDATES) {
+    if (fs.existsSync(candidate)) {
+      return fs.readFileSync(candidate, 'utf-8');
+    }
   }
-  return fs.readFileSync(CODE_GS_PATH, 'utf-8');
+  throw new Error('code.gs file not found in project root.');
 }
 
 export async function callAppsScriptPost<T = Record<string, unknown>>(
