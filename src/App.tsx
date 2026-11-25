@@ -915,42 +915,61 @@ export default function App() {
               )}
 
               {activeModule === 'background-runs' && (
-                <PlanningView
-                  products={workspace.products}
-                  plans={workspace.plans}
-                  activeProductId={activeProductId}
-                  onSelectProduct={setActiveProductId}
-                  onQuickCreateProduct={(opts) => handleQuickCreateProduct(opts)}
-                  onGenerateOutline={async (payload) => {
-                    const { steps } = await workspaceApi.generateOutline(payload);
-                    showNotice(`Drafted ${steps.length} production steps with AI.`);
-                    return steps;
-                  }}
-                  onCreatePlan={async (payload) => {
-                    const { plan } = await workspaceApi.createPlan(payload);
-                    await refreshWorkspace();
-                    showNotice(`Saved batch plan "${plan.name}".`);
-                  }}
-                  onUpdatePlan={async (planId, payload) => {
-                    const { plan } = await workspaceApi.updatePlan(planId, payload);
-                    await refreshWorkspace();
-                    showNotice(`Updated prompts in "${plan.name}".`);
-                  }}
-                  onQueuePlan={async (planId) => {
-                    const { jobs } = await workspaceApi.queuePlan(
-                      planId,
-                      workspace.settings.openRouterConfigured ? 'openrouter' : 'gemini'
-                    );
-                    await refreshWorkspace();
-                    showNotice(`Queued ${jobs.length} background jobs.`);
-                    setActiveModule('background-runs');
-                  }}
-                  onDeletePlan={async (planId) => {
-                    await workspaceApi.deletePlan(planId);
-                    await refreshWorkspace();
-                    showNotice('Deleted batch plan.');
-                  }}
-                />
+                <div className="space-y-6">
+                  <PlanningView
+                    products={workspace.products}
+                    plans={workspace.plans}
+                    activeProductId={activeProductId}
+                    onSelectProduct={setActiveProductId}
+                    onQuickCreateProduct={(opts) => handleQuickCreateProduct(opts)}
+                    onGenerateOutline={async (payload) => {
+                      const { steps } = await workspaceApi.generateOutline(payload);
+                      showNotice(`Drafted ${steps.length} production steps with AI.`);
+                      return steps;
+                    }}
+                    onCreatePlan={async (payload) => {
+                      const { plan } = await workspaceApi.createPlan(payload);
+                      await refreshWorkspace();
+                      showNotice(`Saved batch plan "${plan.name}".`);
+                    }}
+                    onUpdatePlan={async (planId, payload) => {
+                      const { plan } = await workspaceApi.updatePlan(planId, payload);
+                      await refreshWorkspace();
+                      showNotice(`Updated prompts in "${plan.name}".`);
+                    }}
+                    onQueuePlan={async (planId) => {
+                      const { jobs } = await workspaceApi.queuePlan(
+                        planId,
+                        workspace.settings.openRouterConfigured ? 'openrouter' : 'gemini'
+                      );
+                      await refreshWorkspace();
+                      showNotice(`Queued ${jobs.length} background jobs.`);
+                    }}
+                    onDeletePlan={async (planId) => {
+                      await workspaceApi.deletePlan(planId);
+                      await refreshWorkspace();
+                      showNotice('Deleted batch plan.');
+                    }}
+                  />
+                  <JobsView
+                    jobs={workspace.jobs}
+                    products={workspace.products}
+                    settings={workspace.settings}
+                    autoPoll={autoPoll}
+                    runningStep={runningStep}
+                    onToggleAutoPoll={() => setAutoPoll((prev) => !prev)}
+                    onRunNextJob={handleRunNextJob}
+                    onRefreshJobs={async () => {
+                      await refreshWorkspace();
+                      showNotice('Polled latest job queue status.');
+                    }}
+                    onJobAction={async (jobId, action) => {
+                      await workspaceApi.jobAction(jobId, action);
+                      await refreshWorkspace();
+                      showNotice(`Updated job status (${action}).`);
+                    }}
+                  />
+                </div>
               )}
 
               {activeModule === 'settings' && (
