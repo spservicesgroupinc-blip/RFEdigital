@@ -9,23 +9,23 @@ import {
   UPLOADS_DIR,
   resolveSafeChildPath,
   workspaceStore,
-} from './store';
+} from './store.js';
 import {
   generateProductPromptPackWithAI,
   generatePublishingText,
   generateSeriesPlanSteps,
   generateStorybookIllustration,
-} from './aiGenerator';
+} from './aiGenerator.js';
 import {
   runLiveTrendDeepDive,
   runLiveTrendMarketScan,
-} from './trendsResearch';
-import { buildAssetBundleZip, buildKdpPdfBuffer } from './pdfExport';
+} from './trendsResearch.js';
+import { buildAssetBundleZip, buildKdpPdfBuffer } from './pdfExport.js';
 import {
   callAppsScriptHealth,
   callAppsScriptPost,
   readCodeGsSource,
-} from './appsScriptBridge';
+} from './appsScriptBridge.js';
 import {
   buildPlanStepsFromPromptPack,
   buildPromptPackFromConcept,
@@ -37,7 +37,7 @@ import {
   validateProductInput,
   validateTokenName,
   type JobAction,
-} from '../src/lib/workspaceLogic';
+} from '../src/lib/workspaceLogic.js';
 import type {
   ApiTokenRecord,
   BatchPlan,
@@ -57,7 +57,7 @@ import type {
   TrendOpportunity,
   TrendProductType,
   TrendTimeHorizon,
-} from '../src/types/workspace';
+} from '../src/types/workspace.js';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -1964,6 +1964,22 @@ export function createApiApp(): express.Express {
       });
     }
   });
+
+  // Structured JSON error handler for Express / Vercel serverless runtime
+  app.use(
+    (
+      err: unknown,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      const message = err instanceof Error ? err.message : 'Internal server error.';
+      console.error('[FolioPress API Error]', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: message });
+      }
+    }
+  );
 
   return app;
 }

@@ -16,7 +16,7 @@ import type {
   TrendOpportunity,
   TrendProductType,
   TrendSourceLink,
-} from '../types/workspace';
+} from '../types/workspace.js';
 
 export interface KdpPageDimensions {
   trimWidthIn: number;

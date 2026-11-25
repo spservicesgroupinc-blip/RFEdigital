@@ -14,9 +14,9 @@ import type {
   StorageFolder,
   TrendScanResult,
   WorkspaceSnapshot,
-} from '../src/types/workspace';
-import { sanitizeFolderSlug } from '../src/lib/workspaceLogic';
-import { isAppsScriptConfigured } from './appsScriptBridge';
+} from '../src/types/workspace.js';
+import { sanitizeFolderSlug } from '../src/lib/workspaceLogic.js';
+import { isAppsScriptConfigured } from './appsScriptBridge.js';
 
 export const IS_SERVERLESS = Boolean(
   process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
@@ -42,9 +42,13 @@ interface PersistedWorkspace extends Omit<WorkspaceSnapshot, 'tokens'> {
 }
 
 function ensureDirs(): void {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  fs.mkdirSync(EXPORTS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    fs.mkdirSync(EXPORTS_DIR, { recursive: true });
+  } catch (err) {
+    console.warn('[FolioPress Store] Directory initialization warning:', err);
+  }
 }
 
 export function resolveSafeChildPath(baseDir: string, filename: string): string {
@@ -119,8 +123,12 @@ class WorkspaceStore {
 
   public save(nextState?: PersistedWorkspace): void {
     if (nextState) this.state = nextState;
-    ensureDirs();
-    fs.writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2), 'utf-8');
+    try {
+      ensureDirs();
+      fs.writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[FolioPress Store] Disk persistence skipped:', err);
+    }
   }
 
   public getSnapshot(): WorkspaceSnapshot {

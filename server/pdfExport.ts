@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import type { KdpTrimSize, Product, StorageAsset } from '../src/types/workspace';
-import { calculateKdpDimensionsPt } from '../src/lib/workspaceLogic';
-import { UPLOADS_DIR, resolveSafeChildPath } from './store';
+import type { KdpTrimSize, Product, StorageAsset } from '../src/types/workspace.js';
+import { calculateKdpDimensionsPt } from '../src/lib/workspaceLogic.js';
+import { UPLOADS_DIR, resolveSafeChildPath } from './store.js';
 
 const PUBLIC_IMAGES_DIR = path.resolve(process.cwd(), 'src', 'assets', 'images');
 

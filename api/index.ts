@@ -1,6 +1,4 @@
-import { createApiApp } from '../server/app';
-
-export const maxDuration = 60;
+import { createApiApp } from '../server/app.js';
 
 const app = createApiApp();
 

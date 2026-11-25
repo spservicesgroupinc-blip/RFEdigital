@@ -9,13 +9,13 @@ import type {
   TrendScanResult,
   TrendSourceLink,
   TrendTimeHorizon,
-} from '../src/types/workspace';
+} from '../src/types/workspace.js';
 import {
   dedupeSanitizedSources,
   extractJsonObjectFromText,
   normalizeTrendOpportunity,
   sanitizeSourceUrl,
-} from '../src/lib/workspaceLogic';
+} from '../src/lib/workspaceLogic.js';
 
 const PRODUCT_TYPE_LABELS: Record<TrendProductType, string> = {
   'childrens-book': "Children's Picture Books",

@@ -1,5 +1,10 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import type { GenerationMode, GenerationProvider, ProductCategory } from '../src/types/workspace';
+import type {
+  GenerationMode,
+  GenerationProvider,
+  ProductCategory,
+  ProductPromptPack,
+} from '../src/types/workspace.js';
 
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -181,10 +186,10 @@ export async function generateProductPromptPackWithAI(params: {
   concept: string;
   targetAudience: string;
   artStylePreset: string;
-  fallbackPack: import('../src/types/workspace').ProductPromptPack;
+  fallbackPack: ProductPromptPack;
   marketContext?: string;
 }): Promise<{
-  promptPack: import('../src/types/workspace').ProductPromptPack;
+  promptPack: ProductPromptPack;
   usedAi: boolean;
   model: string;
 }> {
@@ -258,7 +263,7 @@ ${params.marketContext ? `Market Research Context:\n${params.marketContext}` : '
           }))
       : [];
 
-    const merged: import('../src/types/workspace').ProductPromptPack = {
+    const merged: ProductPromptPack = {
       ...params.fallbackPack,
       manuscriptPrompt:
         typeof parsed.manuscriptPrompt === 'string' && parsed.manuscriptPrompt.trim().length >= 15

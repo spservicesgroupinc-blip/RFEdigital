@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateAppsScriptWebAppUrl } from '../src/lib/workspaceLogic';
+import { validateAppsScriptWebAppUrl } from '../src/lib/workspaceLogic.js';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CODE_GS_CANDIDATES = [
