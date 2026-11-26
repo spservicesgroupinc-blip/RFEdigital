@@ -1,20 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
-import type {
-  BuilderStep,
-  ExportArtifact,
-  GalleryImage,
-  GenerationMode,
-  GenerationProvider,
-  GenerationRecord,
-  KdpTrimSize,
-  PageTextLayout,
-  Product,
-  ProductCategory,
-  ProductPromptPack,
-  StorageAsset,
-  WorkspaceSettings,
-} from '../types/workspace';
+import type { BuilderStep, ExportArtifact, GalleryImage, GenerationMode, GenerationProvider, GenerationRecord, KdpTrimSize, PageTextLayout, Product, ProductCategory, ProductPromptPack, StorageAsset, WorkspaceSettings } from '../types/workspace';
 import {
   STYLE_PRESET_OPTIONS,
   buildIllustrationPromptFromStoryText,
@@ -38,6 +23,7 @@ import { PdfPreviewModal } from './PdfPreviewModal';
 import { StudioConceptPanel } from './StudioConceptPanel';
 import { StudioDownloadPanel } from './StudioDownloadPanel';
 import { StudioGeneratePanel } from './StudioGeneratePanel';
+import { StudioHeader } from './studio/StudioHeader';
 
 interface StudioViewProps {
   products: Product[];
@@ -136,12 +122,6 @@ interface StudioViewProps {
   onOpenGallery: () => void;
   onGoToTrends: () => void;
 }
-
-const STEP_META: Array<{ step: BuilderStep; title: string; short: string }> = [
-  { step: 1, title: '1. Concept', short: '1. Concept' },
-  { step: 2, title: '2. Generate', short: '2. Generate' },
-  { step: 3, title: '3. Download', short: '3. Download' },
-];
 
 export function StudioView({
   products,
@@ -1243,94 +1223,35 @@ export function StudioView({
     return readiness.exportCount > 0;
   };
 
+  const handleProductChange = (value: string) => {
+    if (value === '__new__') {
+      setCreatingNew(true);
+      setStep(1);
+    } else {
+      setCreatingNew(false);
+      onSelectProduct(value);
+    }
+  };
+
   return (
     <div className="space-y-5">
-      {/* Unified Product Context & 3-Step Progress Bar */}
-      <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="font-display text-base font-semibold text-slate-900 sm:text-lg">
-              {creatingNew ? 'Start a New Digital Product' : product?.title ?? 'Product Studio'}
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Simple 3-step workflow from book concept or market trend to a finished KDP PDF.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {products.length > 0 && (
-              <select
-                aria-label="Switch active product"
-                value={creatingNew ? '__new__' : productId}
-                onChange={(e) => {
-                  if (e.target.value === '__new__') {
-                    setCreatingNew(true);
-                    setStep(1);
-                  } else {
-                    setCreatingNew(false);
-                    onSelectProduct(e.target.value);
-                  }
-                }}
-                className="max-w-[220px] rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 focus:border-blue-700 focus:outline-none"
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-                <option value="__new__">+ Start New Book / Product</option>
-              </select>
-            )}
-
-            <button
-              type="button"
-              onClick={onGoToTrends}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap shrink-0"
-            >
-              Find Niche in Trends
-            </button>
-          </div>
-        </div>
-
-        {/* 3-Tab Studio Stepper */}
-        <nav
-          aria-label="Studio tabs"
-          className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
-        >
-          {STEP_META.map((item) => {
-            const active = step === item.step;
-            const done = isStepComplete(item.step);
-            const disabled = creatingNew && item.step > 1;
-            return (
-              <button
-                key={item.step}
-                type="button"
-                disabled={disabled}
-                aria-current={active ? 'step' : undefined}
-                onClick={() => setStep(item.step)}
-                className={`flex items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                  active
-                    ? 'border-blue-700 bg-blue-50 text-blue-900'
-                    : done
-                      ? 'border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <span className="truncate sm:hidden">{item.short}</span>
-                <span className="hidden truncate sm:inline">{item.title}</span>
-                {done && !active && (
-                  <Check className="h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden="true" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </section>
+      <StudioHeader
+        title={creatingNew ? 'Start a New Digital Product' : product?.title ?? 'Product Studio'}
+        description="Simple 3-step workflow from book concept or market trend to a finished KDP PDF."
+        products={products}
+        productId={productId}
+        creatingNew={creatingNew}
+        step={step}
+        isStepComplete={isStepComplete}
+        onProductChange={handleProductChange}
+        onStepChange={setStep}
+        onGoToTrends={onGoToTrends}
+      />
 
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-800"
+          className="rounded-md border border-danger-200 bg-danger-subtle px-4 py-3 text-xs font-medium text-danger-800"
         >
           {error}
         </div>
