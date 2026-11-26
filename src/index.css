@@ -4,13 +4,77 @@
   --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Primary: refined indigo — distinctive without being the generic AI purple */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+  --color-primary-950: #1e1b4b;
+
+  /* Semantic aliases */
+  --color-primary: var(--color-primary-600);
+  --color-primary-hover: var(--color-primary-700);
+  --color-primary-pressed: var(--color-primary-800);
+  --color-primary-subtle: var(--color-primary-50);
+  --color-primary-muted: var(--color-primary-100);
+  --color-primary-ring: var(--color-primary-200);
+
+  /* Surfaces: cool, clean slate with a hint of warmth */
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-secondary: #f8fafc;
+  --color-surface-tertiary: #f1f5f9;
+  --color-surface-muted: #e2e8f0;
+
+  /* Borders */
+  --color-border: #e2e8f0;
+  --color-border-subtle: #f1f5f9;
+  --color-border-strong: #cbd5e1;
+
+  /* Text */
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-placeholder: #94a3b8;
+  --color-text-inverse: #f8fafc;
+
+  /* Success */
+  --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success: var(--color-success-600);
+  --color-success-subtle: var(--color-success-50);
+
+  /* Warning */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning: var(--color-warning-600);
+  --color-warning-subtle: var(--color-warning-50);
+
+  /* Danger */
+  --color-danger-50: #fff1f2;
+  --color-danger-100: #ffe4e6;
+  --color-danger-600: #e11d48;
+  --color-danger-700: #be123c;
+  --color-danger: var(--color-danger-600);
+  --color-danger-subtle: var(--color-danger-50);
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
-    color: #0f172a;
-    background-color: #f8fafc;
+    color: var(--color-text);
+    background-color: var(--color-surface-secondary);
     overflow-x: clip;
     -webkit-text-size-adjust: 100%;
     overscroll-behavior-y: none;
@@ -27,6 +91,11 @@
   h3 {
     font-family: var(--font-display);
     text-wrap: balance;
+    color: var(--color-text);
+  }
+
+  p {
+    color: var(--color-text-secondary);
   }
 
   button:not(:disabled),
@@ -36,9 +105,18 @@
   }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-  select {
+  select,
+  textarea {
     line-height: 1.5;
     min-height: 2.5rem;
+    color: var(--color-text);
+    background-color: var(--color-surface);
+    border-color: var(--color-border-strong);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-placeholder);
   }
 
   textarea {
@@ -52,6 +130,11 @@
     textarea {
       font-size: 16px;
     }
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-300);
+    outline-offset: 2px;
   }
 }
 
@@ -75,10 +158,10 @@
 /* Official Google Sign-In button presentation */
 .gsi-material-button {
   user-select: none;
-  background-color: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #1e293b;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 13px;
@@ -101,12 +184,12 @@
 }
 
 .gsi-material-button:hover:not(:disabled) {
-  background-color: #f8fafc;
-  border-color: #94a3b8;
+  background-color: var(--color-surface-secondary);
+  border-color: var(--color-border-strong);
 }
 
 .gsi-material-button:focus-visible {
-  outline: 2px solid #1d4ed8;
+  outline: 2px solid var(--color-primary-300);
   outline-offset: 2px;
 }
 
