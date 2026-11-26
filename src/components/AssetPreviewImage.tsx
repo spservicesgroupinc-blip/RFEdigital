@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { BookOpen } from 'lucide-react';
+import { ImageOff } from 'lucide-react';
 
-interface AssetPreviewImageProps {
+export interface AssetPreviewImageProps {
   src: string | null | undefined;
   alt: string;
   fallbackLabel?: string;
@@ -18,10 +18,10 @@ export function AssetPreviewImage({
 
   if (!src || failed) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-slate-100 px-3 text-center text-slate-500">
-        <BookOpen className="h-6 w-6 text-slate-400" aria-hidden="true" />
+      <div className="flex h-full w-full flex-col items-center justify-center bg-surface-tertiary px-3 text-center text-text-muted">
+        <ImageOff className="h-6 w-6 text-text-muted" aria-hidden="true" />
         {fallbackLabel && (
-          <span className="mt-2 line-clamp-2 text-xs font-medium text-slate-600">
+          <span className="mt-2 line-clamp-2 text-xs font-medium text-text-secondary">
             {fallbackLabel}
           </span>
         )}
@@ -36,6 +36,7 @@ export function AssetPreviewImage({
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
       className={className}
+      loading="lazy"
     />
   );
 }
