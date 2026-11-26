@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from 'firebase/auth';
 import {
   BookOpen,
   Cpu,
   FolderKanban,
-  KeyRound,
   Layers,
   LayoutDashboard,
-  Menu,
-  Plus,
   Settings,
-  Sparkles,
   TrendingUp,
-  X,
 } from 'lucide-react';
 import type {
   BuilderStep,
@@ -32,8 +27,6 @@ import {
 import { LibraryView } from './components/LibraryView';
 import { TrendsView } from './components/TrendsView';
 import { StudioView } from './components/StudioView';
-import { ImageGalleryView } from './components/ImageGalleryView';
-import { StorageView } from './components/StorageView';
 import { AssetsView } from './components/AssetsView';
 import { PlanningView } from './components/PlanningView';
 import { JobsView } from './components/JobsView';
@@ -41,6 +34,13 @@ import { ExportView } from './components/ExportView';
 import { IdentityView } from './components/IdentityView';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import {
+  DesktopSidebar,
+  MobileDrawer,
+  MobileBottomNav,
+  TopHeader,
+  NoticeBanner,
+} from './components/layout';
 
 const NAV_ITEMS: Array<{
   id: ModuleId;
@@ -49,29 +49,30 @@ const NAV_ITEMS: Array<{
   caption: string;
   icon: typeof BookOpen;
 }> = [
-  // Primary workflow: Dashboard → Studio → Assets
   { id: 'dashboard', group: 'primary', label: 'Dashboard', caption: 'Products & Books', icon: LayoutDashboard },
   { id: 'studio', group: 'primary', label: 'Studio', caption: 'Create & Generate', icon: Layers },
   { id: 'assets', group: 'primary', label: 'Assets', caption: 'Images & Files', icon: FolderKanban },
-  // Secondary tools
   { id: 'trends', group: 'secondary', label: 'Market Trends', caption: 'Find Niches', icon: TrendingUp },
   { id: 'background-runs', group: 'secondary', label: 'Background Runs', caption: 'Plans & Jobs', icon: Cpu },
   { id: 'settings', group: 'secondary', label: 'Settings', caption: 'Google & Keys', icon: Settings },
 ];
 
-/** Map old and current URL path segments to the active module id.
- *  Legacy routes redirect to their modern counterpart. */
+const MOBILE_PRIMARY_TABS: Array<{ id: ModuleId; label: string; icon: typeof BookOpen }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'studio', label: 'Studio', icon: Layers },
+  { id: 'assets', label: 'Assets', icon: FolderKanban },
+];
+
+/** Map old and current URL path segments to the active module id. */
 function getInitialModuleFromPath(): ModuleId {
   const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
   const redirects: Record<string, ModuleId> = {
-    // modern routes
     dashboard: 'dashboard',
     studio: 'studio',
     assets: 'assets',
     trends: 'trends',
     'background-runs': 'background-runs',
     settings: 'settings',
-    // legacy routes
     library: 'dashboard',
     builder: 'studio',
     gallery: 'assets',
@@ -96,16 +97,13 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showNewProductModal, setShowNewProductModal] = useState(false);
 
-  // Google Workspace auth state (token strictly in-memory via googleAuth.ts)
   const [googleUser, setGoogleUser] = useState<User | null>(null);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
 
-  // Background queue state
   const [autoPoll, setAutoPoll] = useState(false);
   const [runningStep, setRunningStep] = useState(false);
 
-  // Transient feedback banner
   const [notice, setNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
 
   const showNotice = useCallback((text: string, tone: 'info' | 'error' = 'info') => {
@@ -139,7 +137,6 @@ export default function App() {
     refreshWorkspace();
   }, [refreshWorkspace]);
 
-  // Keep clean SPA URL paths (/trends, /settings, /, etc.) in sync with module navigation
   useEffect(() => {
     const targetPath = activeModule === 'dashboard' ? '/' : `/${activeModule}`;
     if (window.location.pathname !== targetPath) {
@@ -166,7 +163,6 @@ export default function App() {
     );
   }, []);
 
-  // Optional auto-runner interval for Jobs module (executes one queued step per tick)
   useEffect(() => {
     if (!autoPoll) return;
     const timer = setInterval(async () => {
@@ -267,10 +263,6 @@ export default function App() {
     }
   };
 
-  const activeNav = NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0];
-  const queuedJobsCount = workspace?.jobs.filter((j) => j.status === 'queued').length ?? 0;
-
-  /** Map legacy module ids to their modern counterparts so internal navigation stays consistent. */
   const normalizeModule = (module: ModuleId): ModuleId => {
     const map: Record<string, ModuleId> = {
       library: 'dashboard',
@@ -339,339 +331,101 @@ export default function App() {
     return product;
   };
 
-  const renderPrimaryHeaderAction = () => {
+  const activeNav = useMemo(
+    () => NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0],
+    [activeModule]
+  );
+  const queuedJobsCount = workspace?.jobs.filter((j) => j.status === 'queued').length ?? 0;
+
+  const primaryHeaderAction = useMemo(() => {
     if (activeModule === 'dashboard') {
-      return (
-        <button
-          type="button"
-          onClick={() => setShowNewProductModal(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 sm:px-3.5 whitespace-nowrap shrink-0"
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="sm:hidden">New</span>
-          <span className="hidden sm:inline">New Product</span>
-        </button>
-      );
+      return {
+        label: 'New Product',
+        shortLabel: 'New',
+        onClick: () => setShowNewProductModal(true),
+      };
     }
     if (activeModule === 'background-runs') {
-      return (
-        <button
-          type="button"
-          disabled={runningStep || queuedJobsCount === 0}
-          onClick={() => handleRunNextJob()}
-          className="rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-45 sm:px-3.5 whitespace-nowrap shrink-0"
-        >
-          {runningStep ? 'Processing…' : 'Run Step'}
-        </button>
-      );
+      return {
+        label: runningStep ? 'Processing…' : 'Run Step',
+        shortLabel: runningStep ? '…' : 'Run',
+        onClick: () => handleRunNextJob(),
+        disabled: runningStep || queuedJobsCount === 0,
+        isLoading: runningStep,
+      };
     }
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setActiveModule('dashboard');
-          setShowNewProductModal(true);
-        }}
-        className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800 sm:px-3.5 whitespace-nowrap shrink-0"
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        <span className="sm:hidden">New</span>
-        <span className="hidden sm:inline">New Product</span>
-      </button>
-    );
-  };
-
-  const MOBILE_PRIMARY_TABS: Array<{
-    id: ModuleId;
-    label: string;
-    icon: typeof BookOpen;
-  }> = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'studio', label: 'Studio', icon: Layers },
-    { id: 'assets', label: 'Assets', icon: FolderKanban },
-  ];
-
-  const isSecondaryModuleActive = !MOBILE_PRIMARY_TABS.some((t) => t.id === activeModule);
-  const primaryNavItems = NAV_ITEMS.filter((i) => i.group === 'primary');
-  const secondaryNavItems = NAV_ITEMS.filter((i) => i.group === 'secondary');
+    return {
+      label: 'New Product',
+      shortLabel: 'New',
+      onClick: () => {
+        setActiveModule('dashboard');
+        setShowNewProductModal(true);
+      },
+    };
+  }, [activeModule, queuedJobsCount, runningStep]);
 
   return (
-    <div className="flex min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip bg-[#F8FAFC] text-slate-900">
-      {/* Desktop Sidebar (252px) */}
-      <aside className="hidden w-[252px] shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
-        <div className="flex h-16 items-center border-b border-slate-200 px-6">
-          <a
-            href="#dashboard"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveModule('dashboard');
-            }}
-            className="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
-          >
-            FolioPress
-          </a>
-        </div>
+    <div className="flex min-h-[100dvh] w-full max-w-[100vw] overflow-x-clip bg-surface-secondary text-text">
+      <DesktopSidebar
+        brand="FolioPress"
+        navItems={NAV_ITEMS}
+        activeModule={activeModule}
+        onNavigate={setActiveModule}
+        workspace={workspace}
+        googleConnected={googleConnected}
+        googleUser={googleUser}
+        queuedJobsCount={queuedJobsCount}
+      />
 
-        <nav className="flex-1 overflow-y-auto p-3" aria-label="Workspace modules">
-          <div className="space-y-1">
-            {primaryNavItems.map((item) => {
-              const Icon = item.icon;
-              const active = activeModule === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setActiveModule(item.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left transition-colors ${
-                    active
-                      ? 'bg-blue-50 text-blue-800'
-                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <Icon
-                      className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
-                      aria-hidden="true"
-                    />
-                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      <MobileDrawer
+        brand="FolioPress"
+        logo="/pwa-192x192.png"
+        isOpen={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        navItems={NAV_ITEMS}
+        activeModule={activeModule}
+        onNavigate={setActiveModule}
+        workspace={workspace}
+        googleConnected={googleConnected}
+        googleUser={googleUser}
+        queuedJobsCount={queuedJobsCount}
+        onInstalled={() => {
+          setMobileNavOpen(false);
+          showNotice('FolioPress installed to your device home screen.');
+        }}
+      />
 
-          <div className="mt-5 border-t border-slate-100 px-3 pb-1.5 pt-4 text-[11px] font-semibold tracking-wide text-slate-400">
-            More
-          </div>
-          <div className="space-y-1">
-            {secondaryNavItems.map((item) => {
-              const Icon = item.icon;
-              const active = activeModule === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setActiveModule(item.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors ${
-                    active
-                      ? 'bg-blue-50 text-blue-800'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <Icon
-                      className={`h-4 w-4 shrink-0 ${active ? 'text-blue-700' : 'text-slate-400'}`}
-                      aria-hidden="true"
-                    />
-                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-                  </span>
-                  {item.id === 'jobs' && queuedJobsCount > 0 && (
-                    <span className="font-mono text-xs font-medium text-amber-700 tabular-nums">
-                      {queuedJobsCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-
-        <div className="border-t border-slate-200 p-4 text-xs">
-          <div className="font-medium text-slate-800">
-            {workspace?.settings.authorImprint ?? 'FolioPress Studio'}
-          </div>
-          <div className="mt-1 text-slate-500">
-            {googleConnected
-              ? `Google connected (${googleUser?.email ?? 'Active'})`
-              : 'Local studio · Connect Drive in Settings'}
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile Navigation Drawer */}
-      {mobileNavOpen && (
-        <div
-          className="fixed inset-0 z-50 flex lg:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Workspace navigation"
-        >
-          <div
-            className="fixed inset-0 bg-slate-900/40"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <div className="safe-top safe-bottom relative z-10 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
-            <div className="flex h-15 items-center justify-between border-b border-slate-200 px-5">
-              <div className="flex items-center gap-2.5">
-                <img
-                  src="/pwa-192x192.png"
-                  alt=""
-                  aria-hidden="true"
-                  className="h-7 w-7 rounded-md"
-                />
-                <span className="font-display text-lg font-bold text-slate-900">FolioPress</span>
-              </div>
-              <button
-                type="button"
-                aria-label="Close navigation menu"
-                onClick={() => setMobileNavOpen(false)}
-                className="rounded p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <nav className="flex-1 space-y-4 overflow-y-auto p-3">
-              <div className="space-y-1">
-                {primaryNavItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = activeModule === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => {
-                          setActiveModule(item.id);
-                          setMobileNavOpen(false);
-                        }}
-                        className={`flex min-h-[44px] w-full items-center justify-between gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium ${
-                          active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                          <span>{item.label}</span>
-                        </span>
-                        <span className="text-[11px] text-slate-400">{item.caption}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-              <div className="border-t border-slate-100 pt-3">
-                <div className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400">
-                  More
-                </div>
-                <div className="space-y-1">
-                  {secondaryNavItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = activeModule === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => {
-                          setActiveModule(item.id);
-                          setMobileNavOpen(false);
-                        }}
-                        className={`flex min-h-[44px] w-full items-center justify-between gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium ${
-                          active ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                          <span>{item.label}</span>
-                        </span>
-                        <span className="text-[11px] text-slate-400">{item.caption}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </nav>
-            <div className="space-y-3 border-t border-slate-200 p-4">
-              <PWAInstallButton
-                variant="full"
-                onInstalled={() => {
-                  setMobileNavOpen(false);
-                  showNotice('FolioPress installed to your device home screen.');
-                }}
-              />
-              <div className="text-xs text-slate-500">
-                <div className="font-medium text-slate-800">
-                  {workspace?.settings.authorImprint ?? 'FolioPress Studio'}
-                </div>
-                <div className="mt-0.5 truncate">
-                  {googleConnected
-                    ? `Google connected (${googleUser?.email ?? 'Active'})`
-                    : 'Local studio · Connect Drive in Settings'}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Clean SaaS Top Bar: Breadcrumb left, Install + contextual action right */}
-        <header className="safe-top sticky top-0 z-30 border-b border-slate-200 bg-white">
-          <div className="flex h-14 items-center justify-between gap-2 px-4 sm:h-16 sm:gap-4 sm:px-5 lg:px-8">
-            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => setMobileNavOpen(true)}
-                aria-label="Open navigation menu"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 lg:hidden"
-              >
-                <Menu className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <div className="flex min-w-0 items-center gap-2 text-sm whitespace-nowrap">
-                <span className="hidden font-medium text-slate-500 sm:inline">Workspace</span>
-                <span className="hidden text-slate-300 sm:inline" aria-hidden="true">
-                  /
-                </span>
-                <h1 className="truncate font-display text-base font-semibold text-slate-900">
-                  {activeNav.label}
-                </h1>
-              </div>
-            </div>
+        <TopHeader
+          activeLabel={activeNav.label}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          primaryAction={primaryHeaderAction}
+          onInstalledPWA={() =>
+            showNotice('FolioPress installed! Launch anytime from your home screen.')
+          }
+        />
 
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <PWAInstallButton
-                variant="header"
-                onInstalled={() =>
-                  showNotice('FolioPress installed! Launch anytime from your home screen.')
-                }
-              />
-              {renderPrimaryHeaderAction()}
-            </div>
-          </div>
-        </header>
-
-        {/* Transient Notice Banner */}
         {notice && (
-          <div
-            role="status"
-            className={`border-b px-4 py-2.5 text-xs font-medium sm:px-5 lg:px-8 ${
-              notice.tone === 'error'
-                ? 'border-red-200 bg-red-50 text-red-800'
-                : 'border-blue-200 bg-blue-50 text-blue-900'
-            }`}
-          >
-            {notice.text}
-          </div>
+          <NoticeBanner
+            tone={notice.tone}
+            text={notice.text}
+            onDismiss={() => setNotice(null)}
+          />
         )}
 
-        {/* Active Module Viewport (extra bottom clearance on mobile for bottom tab bar) */}
         <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 py-4 pb-24 sm:px-5 sm:py-6 sm:pb-24 lg:px-8 lg:pb-8">
           {loading ? (
             <div className="space-y-4">
-              <div className="h-24 animate-pulse rounded-lg border border-slate-200 bg-white" />
-              <div className="h-72 animate-pulse rounded-lg border border-slate-200 bg-white" />
+              <div className="h-24 animate-pulse rounded-lg border border-border bg-surface" />
+              <div className="h-72 animate-pulse rounded-lg border border-border bg-surface" />
             </div>
           ) : loadError || !workspace ? (
-            <div className="rounded-lg border border-red-200 bg-white p-8 text-center">
-              <p className="text-sm font-semibold text-red-800">
-                {loadError || 'Unable to load workspace.'}
-              </p>
+            <div className="rounded-lg border border-danger-100 bg-surface p-8 text-center">
+              <p className="text-sm font-semibold text-danger">{loadError || 'Unable to load workspace.'}</p>
               <button
                 type="button"
                 onClick={refreshWorkspace}
-                className="mt-4 rounded-md bg-blue-700 px-4 py-2 text-xs font-medium text-white hover:bg-blue-800"
+                className="mt-4 rounded-md bg-primary px-4 py-2 text-xs font-medium text-text-inverse hover:bg-primary-hover"
               >
                 Retry Loading
               </button>
@@ -867,9 +621,7 @@ export default function App() {
                     showNotice(`Generated full book — KDP PDF ready (${artifact.pageCount} pages).`);
                     return artifact;
                   }}
-                  onUploadArtifactToDrive={(artifactId) =>
-                    handleUploadToDrive({ artifactId })
-                  }
+                  onUploadArtifactToDrive={(artifactId) => handleUploadToDrive({ artifactId })}
                   onOpenGallery={() => setActiveModule('assets')}
                   onGoToTrends={() => setActiveModule('trends')}
                 />
@@ -1034,46 +786,14 @@ export default function App() {
           )}
         </main>
 
-        {/* Smartphone Bottom Tab Bar (Thumb-friendly native PWA navigation) */}
-        <nav
-          aria-label="Mobile quick navigation"
-          className="safe-bottom fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md lg:hidden"
-        >
-          <div className="grid h-16 grid-cols-5 items-stretch">
-            {MOBILE_PRIMARY_TABS.map((tab) => {
-              const Icon = tab.icon;
-              const active = activeModule === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setActiveModule(tab.id)}
-                  className={`flex flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors ${
-                    active ? 'text-blue-700' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                  <span className="truncate">{tab.label}</span>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="More workspace modules"
-              className={`relative flex flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium transition-colors ${
-                isSecondaryModuleActive ? 'text-blue-700' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <Menu className="h-5 w-5 shrink-0" aria-hidden="true" />
-              <span>More</span>
-              {queuedJobsCount > 0 && (
-                <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-amber-500" />
-              )}
-            </button>
-          </div>
-        </nav>
+        <MobileBottomNav
+          tabs={MOBILE_PRIMARY_TABS}
+          moreTabs={NAV_ITEMS.filter((i) => i.group === 'secondary').map((i) => i.id)}
+          activeModule={activeModule}
+          onNavigate={setActiveModule}
+          onOpenMore={() => setMobileNavOpen(true)}
+          queuedJobsCount={queuedJobsCount}
+        />
 
         <OfflineIndicator />
       </div>
